@@ -296,6 +296,20 @@ img.avatar { object-fit: cover; }
 .email-row { font-size: 13px; color: var(--ink-2); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .email-row strong { color: var(--ink); }
 
+.city-wrap { position: relative; display: block; }
+.suggestions {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  margin-top: 4px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  display: block;
+}
+.suggestions button {
+  display: block; width: 100%; text-align: left; padding: 9px 12px;
+  background: none; border: none; color: var(--ink); cursor: pointer; font-size: 13px;
+}
+.suggestions button span { color: var(--ink-muted); font-size: 12px; }
+.suggestions button:hover { background: var(--surface); }
+
 .qa { display: flex; flex-direction: column; gap: 8px; }
 .qa-item {
   border-left: 2px solid var(--series-1); padding: 6px 10px;

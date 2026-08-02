@@ -425,7 +425,7 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 200, { ok: true });
       }
       if (req.method === 'PUT' && !action) {
-        if (!project.members.includes(person.id)) return sendJson(res, 403, { error: 'only team members can edit' });
+        if (project.createdBy !== person.id) return sendJson(res, 403, { error: 'only the project creator can edit it' });
         const updates = cleanProject(body);
         if (!updates.name) return sendJson(res, 400, { error: 'project name is required' });
         Object.assign(project, updates);

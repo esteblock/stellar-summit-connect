@@ -27,6 +27,7 @@ const state = {
   myConnections: new Set(JSON.parse(localStorage.getItem('ssc-conns') || '[]')),
   myTries: new Set(JSON.parse(localStorage.getItem('ssc-tries') || '[]')),
   photoDataUrl: null,
+  pickedGeo: null, // {lat, lon} of the clicked city suggestion
   initialProjectIds: [],
   map: null,
   mapMarkers: null,
@@ -595,6 +596,80 @@ $('#signout-btn').addEventListener('click', async () => {
 
 const form = $('#join-form');
 
+/* ---------- country dropdown + city autocomplete (no typos on the map) ---------- */
+
+const countrySel = $('#country-select');
+
+function fillCountrySelect() {
+  const labels = Object.values(COUNTRY_COORDS).map((c) => c.label).sort();
+  countrySel.innerHTML = '<option value="">Select your country…</option>' +
+    labels.map((l) => `<option>${esc(l)}</option>`).join('') +
+    '<option value="__other">Other…</option>';
+}
+fillCountrySelect();
+
+function setCountryValue(raw) {
+  if (!raw) { countrySel.value = ''; return; }
+  const canonical = countryCoord(raw)?.label || raw;
+  if (![...countrySel.options].some((o) => o.value === canonical)) {
+    const opt = document.createElement('option');
+    opt.textContent = canonical;
+    countrySel.insertBefore(opt, countrySel.lastElementChild);
+  }
+  countrySel.value = canonical;
+}
+
+countrySel.addEventListener('change', () => {
+  state.pickedGeo = null;
+  if (countrySel.value === '__other') {
+    const v = (window.prompt('Type your country:') || '').trim();
+    if (v) setCountryValue(v);
+    else countrySel.value = '';
+  }
+});
+
+const cityInput = $('#city-input');
+const citySugBox = $('#city-suggestions');
+let cityTimer = null;
+
+function hideCitySuggestions() { citySugBox.classList.add('hidden'); citySugBox.innerHTML = ''; }
+
+cityInput.addEventListener('input', () => {
+  state.pickedGeo = null;
+  clearTimeout(cityTimer);
+  const q = cityInput.value.trim();
+  if (q.length < 2) { hideCitySuggestions(); return; }
+  cityTimer = setTimeout(() => fetchCitySuggestions(q), 350);
+});
+cityInput.addEventListener('blur', () => setTimeout(hideCitySuggestions, 200)); // let clicks land first
+
+async function fetchCitySuggestions(q) {
+  // Photon (photon.komoot.io): open-source OSM geocoder built for autocomplete
+  const country = countrySel.value && countrySel.value !== '__other' ? countrySel.value : '';
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(country ? `${q}, ${country}` : q)}&limit=8&lang=en`;
+  let features = [];
+  try { ({ features } = await fetch(url).then((r) => r.json())); } catch { return; }
+  const rank = { city: 0, town: 1, village: 2, municipality: 3 };
+  const results = (features || [])
+    .filter((f) => f.properties.type in rank)
+    .sort((a, b) => rank[a.properties.type] - rank[b.properties.type])
+    .slice(0, 5);
+  if (cityInput.value.trim() !== q || !results.length) { hideCitySuggestions(); return; }
+  citySugBox.innerHTML = results.map((f, i) => {
+    const p = f.properties;
+    const where = [p.state, p.country].filter(Boolean).join(', ');
+    return `<button type="button" data-i="${i}"><strong>${esc(p.name)}</strong>${where ? ` <span>${esc(where)}</span>` : ''}</button>`;
+  }).join('');
+  citySugBox.classList.remove('hidden');
+  citySugBox.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => {
+    const f = results[btn.dataset.i];
+    cityInput.value = f.properties.name;
+    state.pickedGeo = { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] };
+    if (f.properties.country) setCountryValue(f.properties.country);
+    hideCitySuggestions();
+  }));
+}
+
 function projectBlockEl(data = {}) {
   const el = document.createElement('div');
   el.className = 'project-block';
@@ -603,8 +678,9 @@ function projectBlockEl(data = {}) {
   if (data.joinOnly) {
     el.dataset.kind = 'join';
     el.innerHTML = `<div class="project-block-head">
-      <span>Joining <strong>${esc(data.name)}</strong> · team of ${data.members.length}</span>
-      <button type="button" class="btn ghost small pb-remove">✕ Cancel</button></div>`;
+      <span>${data.existingMember ? 'Member of' : 'Joining'} <strong>${esc(data.name)}</strong> · team of ${data.members.length}
+        ${data.existingMember ? '<span class="mini-label">(only the creator can edit it)</span>' : ''}</span>
+      <button type="button" class="btn ghost small pb-remove">✕ ${data.existingMember ? 'Leave' : 'Cancel'}</button></div>`;
   } else {
     el.dataset.kind = data.id ? 'edit' : 'new';
     el.innerHTML = `
@@ -705,8 +781,12 @@ form.addEventListener('submit', async (e) => {
   status.className = 'form-status';
   status.textContent = 'Saving…';
   try {
-    // find the city on the map (OpenStreetMap's free geocoder); country centroid is the fallback
-    if (body.city || body.country) {
+    if (body.country === '__other') body.country = '';
+    // exact coords if a city suggestion was clicked; otherwise geocode what was typed
+    if (state.pickedGeo) {
+      body.lat = state.pickedGeo.lat;
+      body.lon = state.pickedGeo.lon;
+    } else if (body.city || body.country) {
       try {
         const q = [body.city, body.country].filter(Boolean).join(', ');
         const geo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`)
@@ -766,9 +846,11 @@ function prefillMyProfile() {
   const me = state.people.find((p) => p.id === state.me.id);
   if (!me) return;
   for (const [k, v] of Object.entries(me)) {
+    if (k === 'country') continue; // handled below (select needs a matching option)
     const input = form.elements[k];
     if (input && typeof v === 'string') input.value = v;
   }
+  setCountryValue(me.country);
   if (me.photoUrl) {
     const prev = $('#photo-preview');
     prev.style.backgroundImage = `url(${me.photoUrl})`;
@@ -778,7 +860,9 @@ function prefillMyProfile() {
   state.initialProjectIds = mine.map((pr) => pr.id);
   const wrap = $('#my-projects');
   wrap.innerHTML = '';
-  mine.forEach((pr) => wrap.appendChild(projectBlockEl(pr)));
+  // your own creations are editable; teams you joined show as membership chips
+  mine.forEach((pr) => wrap.appendChild(projectBlockEl(
+    pr.createdBy === me.id ? pr : { ...pr, joinOnly: true, existingMember: true })));
   refreshExistingOptions();
 }
 
