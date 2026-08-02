@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Stellar Summit Connect · São Paulo</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-star">✦</span>
+    <div>
+      <h1>Stellar Summit Connect</h1>
+      <p class="brand-sub">São Paulo · who's here, what they're building, how to reach them</p>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-view="builders">Builders</button>
+    <button class="tab" data-view="join">Join</button>
+    <button class="tab" data-view="metrics">Metrics</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ============ BUILDERS (dashboard) ============ -->
+  <section id="view-builders" class="view">
+    <div class="filters-row">
+      <input id="search" type="search" placeholder="Search name, project, what they're looking for…" />
+      <select id="filter-category"><option value="">All categories</option></select>
+      <select id="filter-type">
+        <option value="">Technical &amp; Business</option>
+        <option value="Technical">Technical</option>
+        <option value="Business">Business</option>
+        <option value="Both">Both</option>
+      </select>
+      <select id="filter-country"><option value="">All countries</option></select>
+    </div>
+    <p id="builders-count" class="count-line"></p>
+    <div id="cards" class="cards"></div>
+    <div id="empty-state" class="empty hidden">
+      <p>Nobody here yet — be the first! ✦</p>
+      <button class="btn primary" data-goto="join">Add yourself</button>
+    </div>
+  </section>
+
+  <!-- ============ JOIN (form) ============ -->
+  <section id="view-join" class="view hidden">
+    <form id="join-form" class="panel">
+      <h2 id="form-title">Add yourself to the map</h2>
+      <p class="form-hint">Everything except your name is optional. Share only what you want others to see — this board is visible to everyone at the event.</p>
+
+      <div class="photo-row">
+        <div id="photo-preview" class="avatar avatar-lg">✦</div>
+        <label class="btn ghost" for="photo-input">Upload photo</label>
+        <input id="photo-input" type="file" accept="image/*" hidden />
+      </div>
+
+      <div class="grid-2">
+        <label>Name *<input name="name" required maxlength="120" placeholder="Ada Lovelace" /></label>
+        <label>Role<input name="role" maxlength="120" placeholder="Founder, dev, BD…" /></label>
+        <label>Project<input name="project" maxlength="160" placeholder="What are you building?" /></label>
+        <label>Category
+          <select name="category" id="category-select"></select>
+        </label>
+      </div>
+
+      <label>One-liner of your project
+        <input name="oneLiner" maxlength="280" placeholder="Cross-border payments for freelancers on Stellar" />
+      </label>
+
+      <fieldset class="segmented">
+        <legend>I am…</legend>
+        <label><input type="radio" name="profileType" value="Technical" /> Technical</label>
+        <label><input type="radio" name="profileType" value="Business" /> Business</label>
+        <label><input type="radio" name="profileType" value="Both" checked /> Both</label>
+      </fieldset>
+
+      <div class="grid-2">
+        <label>Country<input name="country" maxlength="80" placeholder="Brazil" /></label>
+        <label>City<input name="city" maxlength="80" placeholder="São Paulo" /></label>
+        <label>X / Twitter<input name="x" maxlength="80" placeholder="@handle" /></label>
+        <label>Telegram<input name="telegram" maxlength="80" placeholder="@handle" /></label>
+      </div>
+
+      <label>Email<input name="email" type="email" maxlength="160" placeholder="you@project.xyz" /></label>
+
+      <div id="links-wrap">
+        <label>Project links
+          <input class="link-input" maxlength="300" placeholder="https://myproject.xyz" />
+        </label>
+      </div>
+      <button type="button" id="add-link" class="btn ghost small">+ Add another link</button>
+
+      <label>What are you looking for?
+        <textarea name="lookingFor" maxlength="1200" rows="4"
+          placeholder="Co-founder? Design help? Anchors in LatAm? Intros to wallets? Pilot users? Say what would make this event a win for you."></textarea>
+      </label>
+
+      <button type="submit" class="btn primary big" id="submit-btn">Join the constellation ✦</button>
+      <p id="form-status" class="form-status"></p>
+    </form>
+  </section>
+
+  <!-- ============ METRICS ============ -->
+  <section id="view-metrics" class="view hidden">
+    <div id="stat-tiles" class="tiles"></div>
+
+    <div class="metrics-grid">
+      <div class="panel">
+        <h3>Builders by category</h3>
+        <div id="chart-category" class="hbar-chart"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Technical vs Business</h3>
+        <div id="chart-type"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Most connected</h3>
+        <ol id="top-connectors" class="top-list"></ol>
+      </div>
+
+      <div class="panel">
+        <h3>Most tried projects</h3>
+        <ol id="top-tried" class="top-list"></ol>
+      </div>
+
+      <div class="panel">
+        <h3>Latest connections</h3>
+        <ul id="recent-connections" class="conn-feed"></ul>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
