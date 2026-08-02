@@ -21,8 +21,9 @@ const state = {
   people: [],
   projects: [],
   tries: [],
+  questions: [],
   key: localStorage.getItem('ssc-key') || '',
-  me: JSON.parse(localStorage.getItem('ssc-me') || 'null'), // {id, token}
+  me: null, // {email, id?} — set by /api/auth/me (signed session cookie)
   myConnections: new Set(JSON.parse(localStorage.getItem('ssc-conns') || '[]')),
   myTries: new Set(JSON.parse(localStorage.getItem('ssc-tries') || '[]')),
   photoDataUrl: null,
@@ -81,6 +82,11 @@ function handleUrl(kind, value) {
   if (!h) return null;
   if (kind === 'x') return `https://x.com/${encodeURIComponent(h)}`;
   if (kind === 'telegram') return `https://t.me/${encodeURIComponent(h)}`;
+  if (kind === 'linkedin') {
+    if (/^https?:\/\//i.test(h)) return h;
+    if (h.includes('linkedin.com')) return `https://${h}`;
+    return `https://www.linkedin.com/${h.startsWith('in/') || h.startsWith('company/') ? h : `in/${h}`}`;
+  }
   return null;
 }
 
@@ -111,13 +117,21 @@ async function api(path, opts) {
     headers: { 'Content-Type': 'application/json', 'x-event-key': state.key },
     body: opts ? JSON.stringify(opts.body) : undefined,
   });
-  if (res.status === 401) {
-    showGate();
-    throw new Error('wrong event password');
-  }
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && data.error === 'wrong event password') {
+    showGate();
+    throw new Error(data.error);
+  }
   if (!res.ok) throw new Error(data.error || `request failed (${res.status})`);
   return data;
+}
+
+// requires a signed-in user WITH a saved profile; routes to the right step if not
+function requireProfile() {
+  if (state.me && state.me.id) return true;
+  toast(state.me ? 'Save your profile first ✦' : 'Sign in with your email first ✦');
+  show('join');
+  return false;
 }
 
 /* ---------- event password gate ---------- */
@@ -134,6 +148,7 @@ $('#gate-form').addEventListener('submit', async (e) => {
   try {
     await loadData();
     $('#gate').classList.add('hidden');
+    await fetchMe();
     prefillMyProfile();
     show(initialView);
   } catch {
@@ -142,16 +157,27 @@ $('#gate-form').addEventListener('submit', async (e) => {
 });
 
 async function loadData() {
-  const [{ people }, { projects }, { tries }] = await Promise.all([
-    api('/api/people'), api('/api/projects'), api('/api/tries'),
+  const [{ people }, { projects }, { tries }, { questions }] = await Promise.all([
+    api('/api/people'), api('/api/projects'), api('/api/tries'), api('/api/questions'),
   ]);
   state.people = people;
   state.projects = projects;
   state.tries = tries;
+  state.questions = questions;
   fillFilterOptions();
   renderCards();
   renderProjectCards();
   refreshExistingOptions();
+}
+
+async function fetchMe() {
+  try {
+    const { email, person } = await api('/api/auth/me');
+    state.me = { email, id: person ? person.id : null };
+  } catch {
+    state.me = null; // not signed in
+  }
+  updateJoinView();
 }
 
 /* ---------- shared project widgets (used in both card views) ---------- */
@@ -178,6 +204,34 @@ function tryRowHtml(pr) {
   return (parts.length ? `<div class="try-row">${parts.join('')}</div>` : '') + quotes;
 }
 
+// public Q&A block: anyone signed-in asks; only the person/team answers
+function qaHtml(targetType, targetId) {
+  const qs = state.questions.filter((q) => q.targetType === targetType && q.targetId === targetId);
+  const nameOf = (id) => state.people.find((p) => p.id === id)?.name || 'someone';
+  const iOwn = state.me && state.me.id && (targetType === 'person'
+    ? targetId === state.me.id
+    : (state.projects.find((x) => x.id === targetId)?.members || []).includes(state.me.id));
+
+  const items = qs.slice(-3).map((q) => {
+    const mine = state.me && q.from === state.me.id;
+    return `<div class="qa-item">
+      <div class="qa-q">💬 ${esc(q.text)}
+        <span class="qa-by">— ${esc(nameOf(q.from))}</span>
+        ${(mine || iOwn) ? `<button class="qa-del" data-qdel="${esc(q.id)}" title="Delete">✕</button>` : ''}
+      </div>
+      ${q.answers.map((a) => `<div class="qa-a">↳ ${esc(a.text)} <span class="qa-by">— ${esc(nameOf(a.by))}</span></div>`).join('')}
+      ${iOwn ? `<button class="btn ghost small qa-btn" data-qanswer="${esc(q.id)}">${q.answers.some((a) => a.by === state.me.id) ? 'Edit answer' : 'Answer ↩'}</button>` : ''}
+    </div>`;
+  }).join('');
+
+  const isSelf = state.me && targetType === 'person' && targetId === state.me.id;
+  return `<div class="qa">
+    ${qs.length > 3 ? `<div class="qa-by">${qs.length - 3} earlier question${qs.length - 3 === 1 ? '' : 's'} hidden</div>` : ''}
+    ${items}
+    ${!isSelf ? `<button class="btn ghost small qa-btn" data-qask="${esc(targetType)}:${esc(targetId)}">💬 Ask ${targetType === 'project' ? 'the team' : 'them'} a question</button>` : ''}
+  </div>`;
+}
+
 function bindCardActions(rootSel) {
   document.querySelectorAll(`${rootSel} [data-connect]`).forEach((btn) =>
     btn.addEventListener('click', () => connect(btn.dataset.connect, btn)));
@@ -187,6 +241,44 @@ function bindCardActions(rootSel) {
     btn.addEventListener('click', () => joinProject(btn.dataset.joinproj)));
   document.querySelectorAll(`${rootSel} [data-goto]`).forEach((btn) =>
     btn.addEventListener('click', () => show(btn.dataset.goto)));
+  document.querySelectorAll(`${rootSel} [data-qask]`).forEach((btn) =>
+    btn.addEventListener('click', () => askQuestion(...btn.dataset.qask.split(':'))));
+  document.querySelectorAll(`${rootSel} [data-qanswer]`).forEach((btn) =>
+    btn.addEventListener('click', () => answerQuestion(btn.dataset.qanswer)));
+  document.querySelectorAll(`${rootSel} [data-qdel]`).forEach((btn) =>
+    btn.addEventListener('click', () => deleteQuestion(btn.dataset.qdel)));
+}
+
+async function askQuestion(targetType, targetId) {
+  if (!requireProfile()) return;
+  const text = window.prompt('Your public question (everyone can see it):');
+  if (!text || !text.trim()) return;
+  try {
+    await api('/api/questions', { body: { targetType, targetId, text: text.trim() } });
+    toast('Question posted 💬');
+    loadData();
+  } catch (e) { toast(e.message); }
+}
+
+async function answerQuestion(questionId) {
+  if (!requireProfile()) return;
+  const q = state.questions.find((x) => x.id === questionId);
+  const current = q?.answers.find((a) => a.by === state.me.id)?.text || '';
+  const text = window.prompt('Your public answer:', current);
+  if (!text || !text.trim()) return;
+  try {
+    await api(`/api/questions/${questionId}/answers`, { body: { text: text.trim() } });
+    toast('Answer posted ↩');
+    loadData();
+  } catch (e) { toast(e.message); }
+}
+
+async function deleteQuestion(questionId) {
+  if (!window.confirm('Delete this question?')) return;
+  try {
+    await api(`/api/questions/${questionId}`, { method: 'DELETE', body: {} });
+    loadData();
+  } catch (e) { toast(e.message); }
 }
 
 /* ---------- builders view ---------- */
@@ -238,6 +330,7 @@ function personCardHtml(p) {
   const contacts = [
     p.x && `<a href="${esc(handleUrl('x', p.x))}" target="_blank" rel="noopener" title="X / Twitter">𝕏 ${esc(p.x.replace(/^@/, ''))}</a>`,
     p.telegram && `<a href="${esc(handleUrl('telegram', p.telegram))}" target="_blank" rel="noopener" title="Telegram">✈ ${esc(p.telegram.replace(/^@/, ''))}</a>`,
+    p.linkedin && `<a href="${esc(handleUrl('linkedin', p.linkedin))}" target="_blank" rel="noopener" title="LinkedIn">in</a>`,
     p.email && `<a href="mailto:${esc(p.email)}" title="Email">✉</a>`,
   ].filter(Boolean).join('');
 
@@ -275,6 +368,7 @@ function personCardHtml(p) {
     </div>
     ${projHtml}
     ${p.lookingFor ? `<div class="looking-for"><b>Looking for</b>${esc(p.lookingFor)}</div>` : ''}
+    ${qaHtml('person', p.id)}
     <div class="card-foot">
       <div class="contact-icons">${contacts}</div>
       ${action}
@@ -320,6 +414,7 @@ function projectCardHtml(pr) {
       ${countries ? `<span class="card-place">📍 ${esc(countries)}</span>` : ''}
     </div>
     ${tryRowHtml(pr)}
+    ${qaHtml('project', pr.id)}
   </article>`;
 }
 
@@ -415,13 +510,9 @@ function renderMap() {
 /* ---------- actions ---------- */
 
 async function connect(toId, btn) {
-  if (!state.me) {
-    toast('Join first so people know who wants to connect ✦');
-    show('join');
-    return;
-  }
+  if (!requireProfile()) return;
   try {
-    await api('/api/connections', { body: { from: state.me.id, to: toId, token: state.me.token } });
+    await api('/api/connections', { body: { to: toId } });
     state.myConnections.add(toId);
     localStorage.setItem('ssc-conns', JSON.stringify([...state.myConnections]));
     btn.outerHTML = `<button class="btn small connected" disabled>Connected ✓</button>`;
@@ -432,14 +523,10 @@ async function connect(toId, btn) {
 }
 
 async function markTried(projectId) {
-  if (!state.me) {
-    toast('Join first so we know who tried it ✦');
-    show('join');
-    return;
-  }
+  if (!requireProfile()) return;
   const comment = window.prompt('Nice! Any quick feedback for the team? (optional)') || '';
   try {
-    await api('/api/tries', { body: { from: state.me.id, to: projectId, token: state.me.token, comment } });
+    await api('/api/tries', { body: { to: projectId, comment } });
     state.myTries.add(projectId);
     localStorage.setItem('ssc-tries', JSON.stringify([...state.myTries]));
     toast('Recorded — thanks for trying their project! 🧪');
@@ -450,21 +537,59 @@ async function markTried(projectId) {
 }
 
 async function joinProject(projectId) {
-  if (!state.me) {
-    toast('Join the board first, then you can join a team ✦');
-    show('join');
-    return;
-  }
+  if (!requireProfile()) return;
   const pr = state.projects.find((x) => x.id === projectId);
   if (!window.confirm(`Join the team of “${pr ? pr.name : 'this project'}”?`)) return;
   try {
-    await api(`/api/projects/${projectId}/join`, { body: { personId: state.me.id, token: state.me.token } });
+    await api(`/api/projects/${projectId}/join`, { body: {} });
     toast('You joined the team! 🎉');
     loadData();
   } catch (e) {
     toast(e.message);
   }
 }
+
+/* ---------- sign in / sign out ---------- */
+
+function updateJoinView() {
+  const signedIn = !!state.me;
+  $('#signin-box').classList.toggle('hidden', signedIn);
+  $('#join-form').classList.toggle('hidden', !signedIn);
+  if (signedIn) {
+    $('#me-email').textContent = state.me.email;
+    $('#form-title').textContent = state.me.id ? 'Edit your profile' : 'Add yourself to the map';
+    $('#submit-btn').textContent = state.me.id ? 'Update profile ✦' : 'Join the constellation ✦';
+  }
+}
+
+$('#signin-box').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = $('#signin-status');
+  const email = $('#signin-email').value.trim();
+  status.className = 'form-status';
+  status.textContent = 'Sending…';
+  try {
+    const r = await api('/api/auth/request-link', { body: { email } });
+    status.classList.add('ok');
+    if (r.devLink) {
+      status.innerHTML = `Dev mode (no email configured): <a href="${esc(r.devLink)}">open your sign-in link</a>`;
+    } else {
+      status.textContent = 'Link sent — check your inbox (and spam) ✉';
+    }
+  } catch (err) {
+    status.classList.add('err');
+    status.textContent = err.message;
+  }
+});
+
+$('#signout-btn').addEventListener('click', async () => {
+  try { await api('/api/auth/logout', { body: {} }); } catch { /* cookie is gone anyway */ }
+  state.me = null;
+  form.reset();
+  $('#my-projects').innerHTML = '';
+  updateJoinView();
+  toast('Signed out');
+});
 
 /* ---------- join form ---------- */
 
@@ -589,25 +714,18 @@ form.addEventListener('submit', async (e) => {
         if (geo[0]) { body.lat = parseFloat(geo[0].lat); body.lon = parseFloat(geo[0].lon); }
       } catch { /* offline — map falls back to country centroid */ }
     }
-    if (state.me) {
-      body.token = state.me.token;
-      await api(`/api/people/${state.me.id}`, { method: 'PUT', body });
-    } else {
-      const { person, token } = await api('/api/people', { body });
-      state.me = { id: person.id, token };
-      localStorage.setItem('ssc-me', JSON.stringify(state.me));
-    }
-    const auth = { personId: state.me.id, token: state.me.token };
+    // upsert: the server knows who we are from the session cookie
+    const { person } = await api('/api/people', { body });
+    state.me = { email: state.me.email, id: person.id };
 
     const keptIds = new Set();
     for (const el of document.querySelectorAll('.project-block')) {
       if (el.dataset.kind === 'join') {
         keptIds.add(el.dataset.id);
-        await api(`/api/projects/${el.dataset.id}/join`, { body: auth });
+        await api(`/api/projects/${el.dataset.id}/join`, { body: {} });
         continue;
       }
       const proj = {
-        ...auth,
         name: el.querySelector('.pb-name').value.trim(),
         oneLiner: el.querySelector('.pb-oneliner').value.trim(),
         categories: [...el.querySelectorAll('.pb-cats input:checked')].map((i) => i.value),
@@ -624,7 +742,7 @@ form.addEventListener('submit', async (e) => {
       }
     }
     for (const id of state.initialProjectIds) {
-      if (!keptIds.has(id)) await api(`/api/projects/${id}/leave`, { body: auth });
+      if (!keptIds.has(id)) await api(`/api/projects/${id}/leave`, { body: {} });
     }
     state.initialProjectIds = [...keptIds];
 
@@ -643,15 +761,10 @@ form.addEventListener('submit', async (e) => {
 });
 
 function prefillMyProfile() {
-  if (!state.me) return;
+  updateJoinView();
+  if (!state.me || !state.me.id) return;
   const me = state.people.find((p) => p.id === state.me.id);
-  if (!me) { // server data was reset — start fresh
-    state.me = null;
-    localStorage.removeItem('ssc-me');
-    return;
-  }
-  $('#form-title').textContent = 'Edit your profile';
-  $('#submit-btn').textContent = 'Update profile ✦';
+  if (!me) return;
   for (const [k, v] of Object.entries(me)) {
     const input = form.elements[k];
     if (input && typeof v === 'string') input.value = v;
@@ -682,6 +795,7 @@ async function loadMetrics() {
     [stats.totalConnections, 'Connections'],
     [stats.mutualConnections, 'Mutual matches'],
     [stats.totalTries, 'Projects tried'],
+    [`${stats.answeredQuestions}/${stats.totalQuestions}`, 'Questions answered'],
     [stats.countries, 'Countries'],
   ].map(([v, label]) =>
     `<div class="tile"><div class="tile-value">${v}</div><div class="tile-label">${label}</div></div>`).join('');
@@ -764,7 +878,8 @@ $('#export-csv').addEventListener('click', () =>
 const initialView = ['builders', 'projects', 'constellation', 'map', 'join', 'metrics'].includes(location.hash.slice(1))
   ? location.hash.slice(1) : 'builders';
 loadData()
-  .then(() => {
+  .then(async () => {
+    await fetchMe();
     prefillMyProfile();
     show(initialView);
   })

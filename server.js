@@ -19,6 +19,8 @@ const PEOPLE_FILE = path.join(DATA_DIR, 'people.json');
 const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
 const CONN_FILE = path.join(DATA_DIR, 'connections.json');
 const TRIES_FILE = path.join(DATA_DIR, 'tries.json');
+const QUESTIONS_FILE = path.join(DATA_DIR, 'questions.json');
+const SECRET_FILE = path.join(DATA_DIR, 'secret.key');
 
 fs.mkdirSync(PHOTOS_DIR, { recursive: true });
 
@@ -31,6 +33,7 @@ const state = {
   projects: readJson(PROJECTS_FILE, []),
   connections: readJson(CONN_FILE, []),
   tries: readJson(TRIES_FILE, []),
+  questions: readJson(QUESTIONS_FILE, []),
 };
 
 function persist() {
@@ -38,13 +41,64 @@ function persist() {
   fs.writeFileSync(PROJECTS_FILE, JSON.stringify(state.projects, null, 2));
   fs.writeFileSync(CONN_FILE, JSON.stringify(state.connections, null, 2));
   fs.writeFileSync(TRIES_FILE, JSON.stringify(state.tries, null, 2));
+  fs.writeFileSync(QUESTIONS_FILE, JSON.stringify(state.questions, null, 2));
 }
+
+// ---------- magic-link auth (HMAC-signed tokens, same pattern as the
+// dataroom: emailed link → 15 min token → 30-day signed session cookie) ----------
+
+function loadSecret() {
+  if (process.env.MAGIC_LINK_SECRET) return process.env.MAGIC_LINK_SECRET;
+  try { return fs.readFileSync(SECRET_FILE, 'utf8').trim(); } catch { /* first run */ }
+  const s = crypto.randomBytes(32).toString('hex');
+  fs.writeFileSync(SECRET_FILE, s);
+  return s;
+}
+const SECRET = loadSecret();
+const LINK_TTL_MS = 15 * 60 * 1000;
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+const b64url = (buf) => Buffer.from(buf).toString('base64url');
+const hsign = (ctx, payload) =>
+  b64url(crypto.createHmac('sha256', SECRET).update(`${ctx}.${payload}`).digest());
+
+function makeToken(ctx, data, ttlMs) {
+  const payload = b64url(JSON.stringify({ ...data, x: Date.now() + ttlMs }));
+  return `${payload}.${hsign(ctx, payload)}`;
+}
+
+function readToken(ctx, token) {
+  const [payload, sig] = String(token || '').split('.');
+  if (!payload || !sig) return null;
+  const a = Buffer.from(sig), b = Buffer.from(hsign(ctx, payload));
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    return Date.now() < data.x ? data : null;
+  } catch { return null; }
+}
+
+function cookies(req) {
+  const out = {};
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return out;
+}
+
+const sessionEmail = (req) => readToken('sess', cookies(req).ssc_session)?.e || null;
+const sessionPerson = (req) => {
+  const email = sessionEmail(req);
+  return email ? state.people.find((p) => (p.email || '').toLowerCase() === email) : null;
+};
 
 // ---------- sanitization ----------
 
+// email is NOT here on purpose: identity comes from the signed session cookie
 const PERSON_FIELDS = {
   name: 120, role: 120, profileType: 20, country: 80, city: 80,
-  x: 80, telegram: 80, email: 160, lookingFor: 1200,
+  x: 80, telegram: 80, linkedin: 160, lookingFor: 1200,
 };
 const PROJECT_FIELDS = { name: 160, oneLiner: 280 };
 
@@ -82,10 +136,15 @@ function cleanProject(body) {
   return p;
 }
 
-// a mutating request must prove who it comes from: {personId, token}
-function authedPerson(body) {
-  const person = state.people.find((x) => x.id === body.personId);
-  return person && body.token === person.token ? person : null;
+async function sendEmail(resendKey, to, subject, html) {
+  return fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: process.env.FROM_EMAIL || 'Stellar Summit Connect <esteban@paltalabs.io>',
+      to: [to], subject, html,
+    }),
+  });
 }
 
 function savePhoto(id, dataUrl) {
@@ -156,6 +215,8 @@ function computeStats() {
     totalConnections: pairs.size,
     mutualConnections: mutual.size,
     totalTries: state.tries.length,
+    totalQuestions: state.questions.length,
+    answeredQuestions: state.questions.filter((q) => q.answers.length).length,
     countries: Object.keys(byCountry).length,
     byCategory,
     byCountry,
@@ -218,41 +279,109 @@ const server = http.createServer(async (req, res) => {
   const route = `${req.method} ${url.pathname}`;
 
   try {
-    if (url.pathname.startsWith('/api/') && req.headers['x-event-key'] !== ACCESS_KEY) {
+    // the emailed magic link arrives without the event-key header; the signed
+    // token in it is its own proof
+    if (url.pathname.startsWith('/api/') && url.pathname !== '/api/auth/verify'
+        && req.headers['x-event-key'] !== ACCESS_KEY) {
       return sendJson(res, 401, { error: 'wrong event password' });
     }
+
+    // ---------- auth ----------
+
+    if (route === 'POST /api/auth/request-link') {
+      const body = await readBody(req);
+      const email = String(body.email || '').trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return sendJson(res, 400, { error: 'that does not look like an email address' });
+      }
+      const token = makeToken('link', { e: email }, LINK_TTL_MS);
+      const origin = process.env.SITE_URL ||
+        `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['x-forwarded-host'] || req.headers.host}`;
+      const link = `${origin}/api/auth/verify?token=${token}`;
+
+      const resendKey = process.env.RESEND_API_KEY;
+      if (!resendKey) {
+        console.log(`✦ magic link for ${email}: ${link}`);
+        return sendJson(res, 200, {
+          ok: true, devLink: link,
+          note: 'RESEND_API_KEY is not set — link returned directly (dev mode)',
+        });
+      }
+      const r = await sendEmail(resendKey, email, 'Your Stellar Summit Connect sign-in link', `
+        <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:24px 0;color:#1a1a1a">
+          <h2 style="margin:0 0 12px">✦ Stellar Summit Connect</h2>
+          <p>Click the button below to sign in. The link is valid for 15 minutes.</p>
+          <p style="margin:24px 0">
+            <a href="${link}" style="background:#2a78d6;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:10px;display:inline-block;font-weight:600">Sign in ✦</a>
+          </p>
+          <p style="color:#7d8b8d;font-size:13px">If you didn't request this, you can ignore this email.</p>
+        </div>`);
+      if (!r.ok) {
+        console.error('Resend error', r.status, await r.text().catch(() => ''));
+        return sendJson(res, 502, { error: 'could not send the email, try again in a minute' });
+      }
+      return sendJson(res, 200, { ok: true, message: 'Link sent — check your inbox.' });
+    }
+
+    if (route === 'GET /api/auth/verify') {
+      const data = readToken('link', url.searchParams.get('token'));
+      if (!data) { res.writeHead(302, { Location: '/#join' }); return res.end(); }
+      const session = makeToken('sess', { e: data.e }, SESSION_TTL_MS);
+      const maxAge = Math.floor(SESSION_TTL_MS / 1000);
+      const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
+      res.writeHead(302, {
+        'Set-Cookie': [
+          `ssc_session=${session}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${secure}`,
+          `ssc_email=${encodeURIComponent(data.e)}; Max-Age=${maxAge}; Path=/; SameSite=Lax${secure}`,
+        ],
+        Location: '/#join',
+      });
+      return res.end();
+    }
+
+    if (route === 'GET /api/auth/me') {
+      const email = sessionEmail(req);
+      if (!email) return sendJson(res, 401, { error: 'not signed in' });
+      const person = state.people.find((p) => (p.email || '').toLowerCase() === email) || null;
+      return sendJson(res, 200, { email, person: person && publicPerson(person) });
+    }
+
+    if (route === 'POST /api/auth/logout') {
+      res.writeHead(200, {
+        'Set-Cookie': [
+          'ssc_session=; Max-Age=0; Path=/',
+          'ssc_email=; Max-Age=0; Path=/',
+        ],
+        'Content-Type': 'application/json',
+      });
+      return res.end('{"ok":true}');
+    }
+
+    // ---------- people ----------
 
     if (route === 'GET /api/people') {
       return sendJson(res, 200, { people: state.people.map(publicPerson) });
     }
 
+    // upsert: your session email is your identity — you always edit yourself
     if (route === 'POST /api/people') {
+      const email = sessionEmail(req);
+      if (!email) return sendJson(res, 401, { error: 'sign in first (magic link)' });
       const body = await readBody(req);
-      const p = cleanPerson(body);
-      if (!p.name) return sendJson(res, 400, { error: 'name is required' });
-      p.id = crypto.randomUUID();
-      p.token = crypto.randomBytes(16).toString('hex');
-      p.createdAt = new Date().toISOString();
-      const photoUrl = savePhoto(p.id, body.photo);
-      if (photoUrl) p.photoUrl = photoUrl;
-      state.people.push(p);
-      persist();
-      return sendJson(res, 201, { person: publicPerson(p), token: p.token });
-    }
-
-    const putMatch = url.pathname.match(/^\/api\/people\/([\w-]+)$/);
-    if (req.method === 'PUT' && putMatch) {
-      const person = state.people.find((x) => x.id === putMatch[1]);
-      if (!person) return sendJson(res, 404, { error: 'not found' });
-      const body = await readBody(req);
-      if (body.token !== person.token) return sendJson(res, 403, { error: 'wrong token' });
       const updates = cleanPerson(body);
       if (!updates.name) return sendJson(res, 400, { error: 'name is required' });
+      let person = state.people.find((p) => (p.email || '').toLowerCase() === email);
+      let created = false;
+      if (!person) {
+        person = { id: crypto.randomUUID(), email, createdAt: new Date().toISOString() };
+        state.people.push(person);
+        created = true;
+      }
       Object.assign(person, updates);
       const photoUrl = savePhoto(person.id, body.photo);
       if (photoUrl) person.photoUrl = photoUrl;
       persist();
-      return sendJson(res, 200, { person: publicPerson(person) });
+      return sendJson(res, created ? 201 : 200, { person: publicPerson(person) });
     }
 
     if (route === 'GET /api/projects') {
@@ -260,9 +389,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (route === 'POST /api/projects') {
+      const person = sessionPerson(req);
+      if (!person) return sendJson(res, 401, { error: 'sign in and create your profile first' });
       const body = await readBody(req);
-      const person = authedPerson(body);
-      if (!person) return sendJson(res, 403, { error: 'join first (invalid person or token)' });
       const project = cleanProject(body);
       if (!project.name) return sendJson(res, 400, { error: 'project name is required' });
       project.id = crypto.randomUUID();
@@ -280,9 +409,9 @@ const server = http.createServer(async (req, res) => {
     if (projMatch && (req.method === 'PUT' || req.method === 'POST')) {
       const project = state.projects.find((x) => x.id === projMatch[1]);
       if (!project) return sendJson(res, 404, { error: 'project not found' });
+      const person = sessionPerson(req);
+      if (!person) return sendJson(res, 401, { error: 'sign in and create your profile first' });
       const body = await readBody(req);
-      const person = authedPerson(body);
-      if (!person) return sendJson(res, 403, { error: 'join first (invalid person or token)' });
       const action = projMatch[2];
 
       if (req.method === 'POST' && action === 'join') {
@@ -308,12 +437,12 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (route === 'POST /api/connections') {
+      const from = sessionPerson(req);
+      if (!from) return sendJson(res, 401, { error: 'sign in and create your profile first' });
       const body = await readBody(req);
-      const from = state.people.find((x) => x.id === body.from);
       const to = state.people.find((x) => x.id === body.to);
-      if (!from || !to) return sendJson(res, 404, { error: 'person not found' });
+      if (!to) return sendJson(res, 404, { error: 'person not found' });
       if (from.id === to.id) return sendJson(res, 400, { error: 'cannot connect to yourself' });
-      if (body.token !== from.token) return sendJson(res, 403, { error: 'wrong token' });
       if (!state.connections.some((c) => c.from === from.id && c.to === to.id)) {
         state.connections.push({ from: from.id, to: to.id, at: new Date().toISOString() });
         persist();
@@ -326,10 +455,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (route === 'POST /api/tries') {
+      const from = sessionPerson(req);
+      if (!from) return sendJson(res, 401, { error: 'sign in and create your profile first' });
       const body = await readBody(req);
-      const from = authedPerson({ personId: body.from, token: body.token });
       const project = state.projects.find((x) => x.id === body.to);
-      if (!from || !project) return sendJson(res, 404, { error: 'person or project not found' });
+      if (!project) return sendJson(res, 404, { error: 'project not found' });
       if (project.members.includes(from.id)) return sendJson(res, 400, { error: 'cannot try your own project' });
       const comment = typeof body.comment === 'string' ? body.comment.trim().slice(0, 280) : '';
       const existing = state.tries.find((t) => t.from === from.id && t.to === project.id);
@@ -346,6 +476,67 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { tries: state.tries });
     }
 
+    // ---------- public Q&A on people and projects ----------
+
+    if (route === 'GET /api/questions') {
+      return sendJson(res, 200, { questions: state.questions });
+    }
+
+    if (route === 'POST /api/questions') {
+      const from = sessionPerson(req);
+      if (!from) return sendJson(res, 401, { error: 'sign in and create your profile first' });
+      const body = await readBody(req);
+      const text = typeof body.text === 'string' ? body.text.trim().slice(0, 500) : '';
+      if (!text) return sendJson(res, 400, { error: 'question text is required' });
+      const targetType = body.targetType === 'project' ? 'project' : 'person';
+      const target = targetType === 'project'
+        ? state.projects.find((x) => x.id === body.targetId)
+        : state.people.find((x) => x.id === body.targetId);
+      if (!target) return sendJson(res, 404, { error: 'target not found' });
+      if (targetType === 'person' && target.id === from.id) {
+        return sendJson(res, 400, { error: 'cannot ask yourself' });
+      }
+      const q = {
+        id: crypto.randomUUID(), targetType, targetId: target.id,
+        from: from.id, text, at: new Date().toISOString(), answers: [],
+      };
+      state.questions.push(q);
+      persist();
+      return sendJson(res, 201, { question: q });
+    }
+
+    const qMatch = url.pathname.match(/^\/api\/questions\/([\w-]+)(?:\/(answers))?$/);
+    if (qMatch && (req.method === 'POST' || req.method === 'DELETE')) {
+      const q = state.questions.find((x) => x.id === qMatch[1]);
+      if (!q) return sendJson(res, 404, { error: 'question not found' });
+      const person = sessionPerson(req);
+      if (!person) return sendJson(res, 401, { error: 'sign in and create your profile first' });
+
+      const ownsTarget = q.targetType === 'person'
+        ? q.targetId === person.id
+        : (state.projects.find((x) => x.id === q.targetId)?.members || []).includes(person.id);
+
+      if (req.method === 'POST' && qMatch[2] === 'answers') {
+        if (!ownsTarget) return sendJson(res, 403, { error: 'only the person/team asked can answer' });
+        const body = await readBody(req);
+        const text = typeof body.text === 'string' ? body.text.trim().slice(0, 800) : '';
+        if (!text) return sendJson(res, 400, { error: 'answer text is required' });
+        const mine = q.answers.find((a) => a.by === person.id);
+        if (mine) { mine.text = text; mine.at = new Date().toISOString(); } // edit your answer
+        else q.answers.push({ by: person.id, text, at: new Date().toISOString() });
+        persist();
+        return sendJson(res, 201, { question: q });
+      }
+      if (req.method === 'DELETE' && !qMatch[2]) {
+        if (q.from !== person.id && !ownsTarget) {
+          return sendJson(res, 403, { error: 'only the asker or the target can delete a question' });
+        }
+        state.questions = state.questions.filter((x) => x.id !== q.id);
+        persist();
+        return sendJson(res, 200, { ok: true });
+      }
+    }
+
     if (route === 'GET /api/stats') {
       return sendJson(res, 200, computeStats());
     }
@@ -357,12 +548,13 @@ const server = http.createServer(async (req, res) => {
         projects: state.projects,
         connections: state.connections,
         tries: state.tries,
+        questions: state.questions,
         stats: computeStats(),
       });
     }
 
     if (route === 'GET /api/export/people.csv') {
-      const cols = ['name', 'role', 'profileType', 'country', 'city', 'x', 'telegram', 'email', 'lookingFor'];
+      const cols = ['name', 'role', 'profileType', 'country', 'city', 'x', 'telegram', 'linkedin', 'email', 'lookingFor'];
       const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
       const rows = state.people.map((p) => {
         const projs = state.projects.filter((pr) => pr.members.includes(p.id)).map((pr) => pr.name).join('; ');

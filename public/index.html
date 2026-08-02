@@ -97,7 +97,17 @@
 
   <!-- ============ JOIN ============ -->
   <section id="view-join" class="view hidden">
-    <form id="join-form" class="panel">
+    <form id="signin-box" class="panel hidden">
+      <h2>Sign in to join ✦</h2>
+      <p class="form-hint">We'll email you a magic link — no passwords. Your email is your identity: only you can edit your profile, your projects and your answers.</p>
+      <div class="signin-row">
+        <input id="signin-email" type="email" required placeholder="you@project.xyz" autocomplete="email" />
+        <button class="btn primary" id="signin-btn">Send link ✉</button>
+      </div>
+      <p id="signin-status" class="form-status"></p>
+    </form>
+
+    <form id="join-form" class="panel hidden">
       <h2 id="form-title">Add yourself to the map</h2>
       <p class="form-hint">Everything except your name is optional. Share only what you want others to see — this board is visible to everyone at the event.</p>
 
@@ -124,9 +134,11 @@
         <label>City<input name="city" maxlength="80" placeholder="São Paulo" /></label>
         <label>X / Twitter<input name="x" maxlength="80" placeholder="@handle" /></label>
         <label>Telegram<input name="telegram" maxlength="80" placeholder="@handle" /></label>
+        <label>LinkedIn<input name="linkedin" maxlength="160" placeholder="in/handle or full URL" /></label>
       </div>
 
-      <label>Email<input name="email" type="email" maxlength="160" placeholder="you@project.xyz" /></label>
+      <p class="email-row">Signed in as <strong id="me-email"></strong>
+        <button type="button" id="signout-btn" class="btn ghost small">Sign out</button></p>
 
       <label>What are you looking for?
         <textarea name="lookingFor" maxlength="1200" rows="4"

@@ -288,6 +288,30 @@ img.avatar { object-fit: cover; }
 .leaflet-popup-content a { color: #86b6ef; }
 .leaflet-container { font-family: inherit; }
 
+/* ---------- sign-in & Q&A ---------- */
+
+#signin-box { max-width: 480px; margin: 40px auto; display: flex; flex-direction: column; gap: 12px; }
+.signin-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.signin-row input { flex: 1 1 220px; }
+.email-row { font-size: 13px; color: var(--ink-2); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.email-row strong { color: var(--ink); }
+
+.qa { display: flex; flex-direction: column; gap: 8px; }
+.qa-item {
+  border-left: 2px solid var(--series-1); padding: 6px 10px;
+  background: rgba(57, 135, 229, 0.06); border-radius: 6px;
+  display: flex; flex-direction: column; gap: 5px; font-size: 13px;
+}
+.qa-q { color: var(--ink); position: relative; padding-right: 20px; }
+.qa-a { color: var(--ink-2); padding-left: 12px; }
+.qa-by { color: var(--ink-muted); font-size: 11.5px; }
+.qa-btn { align-self: flex-start; }
+.qa-del {
+  position: absolute; right: 0; top: 0; background: none; border: none;
+  color: var(--ink-muted); cursor: pointer; font-size: 12px; padding: 2px;
+}
+.qa-del:hover { color: #e66767; }
+
 /* ---------- constellation ---------- */
 
 #constellation-wrap {

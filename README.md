@@ -16,6 +16,20 @@ node server.js
 - **Event password**: defaults to `PALTAISCOOL`. Change it with
   `ACCESS_KEY=mysecret node server.js`. Every API call requires it; visitors
   enter it once and it's remembered in their browser.
+- **Magic-link sign-in (email = identity)**: to create or edit anything you
+  sign in with your email — the server emails you an HMAC-signed link (15 min
+  TTL) that sets a 30-day signed session cookie. You can only edit *your own*
+  profile, projects and answers. Configure with:
+  ```bash
+  RESEND_API_KEY=re_xxx \
+  FROM_EMAIL="Stellar Summit Connect <you@yourdomain.io>" \
+  SITE_URL=https://your-public-url \
+  node server.js
+  ```
+  (Same Resend setup as the dataroom; `MAGIC_LINK_SECRET` is optional — a
+  secret is auto-generated and persisted in `data/secret.key`.)
+  **Without `RESEND_API_KEY` the server runs in dev mode**: the sign-in link
+  is returned directly in the UI instead of being emailed.
 - Data is persisted to `./data` (plain JSON files + uploaded photos), which is
   gitignored. Copy that folder and you have the whole database.
 
@@ -37,13 +51,16 @@ password screen entirely.
 
 ## What it does
 
-- **Join** — your profile: name (the only required field), role,
-  technical/business, country & city, X, Telegram, email, photo (resized in
-  the browser), and an open "what are you looking for" field. Plus **your
-  projects**: create as many as you want (each with one-liner, multiple
-  categories, up to 5 links, and an optional image) or **join an existing
-  project's team** with one tap. City is geocoded (OpenStreetMap Nominatim)
-  so your pin lands on the map.
+- **Join** — sign in with your email (magic link), then your profile: name
+  (the only required field), role, technical/business, country & city, X,
+  Telegram, LinkedIn, photo (resized in the browser), and an open "what are
+  you looking for" field. Plus **your projects**: create as many as you want
+  (each with one-liner, multiple categories, up to 5 links, and an optional
+  image) or **join an existing project's team** with one tap. City is
+  geocoded (OpenStreetMap Nominatim) so your pin lands on the map.
+- **Public Q&A** — ask any person or project team a public question from
+  their card; only the person asked (or the project's team members) can
+  answer, and answers are editable. Askers and targets can delete questions.
 - **Builders** — everyone's cards with search and filters by category,
   technical/business, and country. Contact links on every card.
 - **Projects** — project-centric view: image (uploaded, or an automatic
