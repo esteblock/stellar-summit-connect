@@ -1,4 +1,4 @@
-/* Stellar Summit Connect — frontend (no dependencies) */
+/* Stellar Summit Connect — frontend (no build step) */
 
 const CATEGORIES = [
   'DeFi',
@@ -19,11 +19,16 @@ const AVATAR_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#
 
 const state = {
   people: [],
+  projects: [],
   tries: [],
+  key: localStorage.getItem('ssc-key') || '',
   me: JSON.parse(localStorage.getItem('ssc-me') || 'null'), // {id, token}
   myConnections: new Set(JSON.parse(localStorage.getItem('ssc-conns') || '[]')),
   myTries: new Set(JSON.parse(localStorage.getItem('ssc-tries') || '[]')),
   photoDataUrl: null,
+  initialProjectIds: [],
+  map: null,
+  mapMarkers: null,
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -38,12 +43,13 @@ function show(view) {
   $(`#view-${view}`).classList.remove('hidden');
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
   if (location.hash !== `#${view}`) history.replaceState(null, '', `#${view}`);
-  if (view === 'builders') loadPeople();
+  if (view === 'builders' || view === 'projects') loadData();
   if (view === 'metrics') loadMetrics();
+  if (view === 'map') loadData().then(renderMap);
+  if (view === 'constellation') loadData().then(renderConstellation);
 }
 
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => show(t.dataset.view)));
-document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => show(b.dataset.goto)));
 
 /* ---------- helpers ---------- */
 
@@ -82,40 +88,120 @@ function normalizeLink(l) {
   return /^https?:\/\//i.test(l) ? l : `https://${l}`;
 }
 
+function projectImage(pr) {
+  if (pr.imageUrl) return pr.imageUrl;
+  if (pr.links && pr.links.length) {
+    // free keyless screenshot of the landing page (first load shows "generating…")
+    return `https://s0.wp.com/mshots/v1/${encodeURIComponent(normalizeLink(pr.links[0]))}?w=640`;
+  }
+  return null;
+}
+
+function membersOf(pr) {
+  return pr.members.map((id) => state.people.find((p) => p.id === id)).filter(Boolean);
+}
+
+function projectsOf(personId) {
+  return state.projects.filter((pr) => pr.members.includes(personId));
+}
+
 async function api(path, opts) {
-  const res = await fetch(path, opts && {
-    method: opts.method || 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(opts.body),
+  const res = await fetch(path, {
+    method: opts ? (opts.method || 'POST') : 'GET',
+    headers: { 'Content-Type': 'application/json', 'x-event-key': state.key },
+    body: opts ? JSON.stringify(opts.body) : undefined,
   });
+  if (res.status === 401) {
+    showGate();
+    throw new Error('wrong event password');
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `request failed (${res.status})`);
   return data;
 }
 
-/* ---------- builders dashboard ---------- */
+/* ---------- event password gate ---------- */
 
-async function loadPeople() {
-  const [{ people }, { tries }] = await Promise.all([api('/api/people'), api('/api/tries')]);
+function showGate() {
+  $('#gate').classList.remove('hidden');
+  $('#gate-input').focus();
+}
+
+$('#gate-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  state.key = $('#gate-input').value.trim();
+  localStorage.setItem('ssc-key', state.key);
+  try {
+    await loadData();
+    $('#gate').classList.add('hidden');
+    prefillMyProfile();
+    show(initialView);
+  } catch {
+    $('#gate-status').textContent = 'Wrong password — ask the organizers ✦';
+  }
+});
+
+async function loadData() {
+  const [{ people }, { projects }, { tries }] = await Promise.all([
+    api('/api/people'), api('/api/projects'), api('/api/tries'),
+  ]);
   state.people = people;
+  state.projects = projects;
   state.tries = tries;
   fillFilterOptions();
   renderCards();
+  renderProjectCards();
+  refreshExistingOptions();
 }
 
+/* ---------- shared project widgets (used in both card views) ---------- */
+
+function tryRowHtml(pr) {
+  const projectTries = state.tries.filter((t) => t.to === pr.id);
+  const amMember = state.me && pr.members.includes(state.me.id);
+  const quotes = projectTries.filter((t) => t.comment).slice(-2).map((t) => {
+    const who = state.people.find((x) => x.id === t.from);
+    return `<blockquote class="try-quote">“${esc(t.comment)}”${who ? ` <span>— ${esc(who.name)}</span>` : ''}</blockquote>`;
+  }).join('');
+
+  const parts = [];
+  if (pr.links && pr.links.length) {
+    parts.push(`<a class="btn small" href="${esc(normalizeLink(pr.links[0]))}" target="_blank" rel="noopener">Try it 🚀</a>`);
+    if (!amMember) {
+      parts.push(state.myTries.has(pr.id)
+        ? `<button class="btn small connected" disabled>Tried 🧪✓</button>`
+        : `<button class="btn small ghost" data-try="${esc(pr.id)}">I tried it 🧪</button>`);
+    }
+  }
+  if (!amMember) parts.push(`<button class="btn small ghost" data-joinproj="${esc(pr.id)}">Join team +</button>`);
+  if (projectTries.length) parts.push(`<span class="try-count">${projectTries.length} tried it</span>`);
+  return (parts.length ? `<div class="try-row">${parts.join('')}</div>` : '') + quotes;
+}
+
+function bindCardActions(rootSel) {
+  document.querySelectorAll(`${rootSel} [data-connect]`).forEach((btn) =>
+    btn.addEventListener('click', () => connect(btn.dataset.connect, btn)));
+  document.querySelectorAll(`${rootSel} [data-try]`).forEach((btn) =>
+    btn.addEventListener('click', () => markTried(btn.dataset.try)));
+  document.querySelectorAll(`${rootSel} [data-joinproj]`).forEach((btn) =>
+    btn.addEventListener('click', () => joinProject(btn.dataset.joinproj)));
+  document.querySelectorAll(`${rootSel} [data-goto]`).forEach((btn) =>
+    btn.addEventListener('click', () => show(btn.dataset.goto)));
+}
+
+/* ---------- builders view ---------- */
+
 function fillFilterOptions() {
-  const catSel = $('#filter-category');
-  const countrySel = $('#filter-country');
-  const keep = (sel) => sel.value;
-  const cats = [...new Set(state.people.map((p) => p.category).filter(Boolean))].sort();
+  const cats = [...new Set(state.projects.flatMap((pr) => pr.categories || []))].sort();
   const countries = [...new Set(state.people.map((p) => p.country).filter(Boolean))].sort();
   const build = (sel, items, allLabel) => {
-    const prev = keep(sel);
+    const prev = sel.value;
     sel.innerHTML = `<option value="">${allLabel}</option>` +
       items.map((c) => `<option${c === prev ? ' selected' : ''}>${esc(c)}</option>`).join('');
   };
-  build(catSel, cats, 'All categories');
-  build(countrySel, countries, 'All countries');
+  build($('#filter-category'), cats, 'All categories');
+  build($('#filter-country'), countries, 'All countries');
+  build($('#pfilter-category'), cats, 'All categories');
 }
 
 function matchesFilters(p) {
@@ -123,12 +209,15 @@ function matchesFilters(p) {
   const cat = $('#filter-category').value;
   const type = $('#filter-type').value;
   const country = $('#filter-country').value;
-  if (cat && p.category !== cat) return false;
+  const myProjects = projectsOf(p.id);
+  if (cat && !myProjects.some((pr) => (pr.categories || []).includes(cat))) return false;
   if (type && p.profileType !== type) return false;
   if (country && p.country !== country) return false;
   if (q) {
-    const hay = [p.name, p.project, p.oneLiner, p.role, p.lookingFor, p.category, p.city, p.country]
-      .filter(Boolean).join(' ').toLowerCase();
+    const hay = [
+      p.name, p.role, p.lookingFor, p.city, p.country,
+      ...myProjects.flatMap((pr) => [pr.name, pr.oneLiner, ...(pr.categories || [])]),
+    ].filter(Boolean).join(' ').toLowerCase();
     if (!hay.includes(q)) return false;
   }
   return true;
@@ -140,24 +229,17 @@ function renderCards() {
     `${visible.length} builder${visible.length === 1 ? '' : 's'}` +
     (visible.length !== state.people.length ? ` (of ${state.people.length})` : '');
   $('#empty-state').classList.toggle('hidden', state.people.length > 0);
-  $('#cards').innerHTML = visible.map(cardHtml).join('');
-
-  document.querySelectorAll('[data-connect]').forEach((btn) =>
-    btn.addEventListener('click', () => connect(btn.dataset.connect, btn)));
-  document.querySelectorAll('[data-try]').forEach((btn) =>
-    btn.addEventListener('click', () => markTried(btn.dataset.try, btn)));
+  $('#cards').innerHTML = visible.map(personCardHtml).join('');
+  bindCardActions('#cards');
 }
 
-function cardHtml(p) {
+function personCardHtml(p) {
   const place = [p.city, p.country].filter(Boolean).join(', ');
   const contacts = [
     p.x && `<a href="${esc(handleUrl('x', p.x))}" target="_blank" rel="noopener" title="X / Twitter">𝕏 ${esc(p.x.replace(/^@/, ''))}</a>`,
     p.telegram && `<a href="${esc(handleUrl('telegram', p.telegram))}" target="_blank" rel="noopener" title="Telegram">✈ ${esc(p.telegram.replace(/^@/, ''))}</a>`,
     p.email && `<a href="mailto:${esc(p.email)}" title="Email">✉</a>`,
   ].filter(Boolean).join('');
-
-  const links = (p.links || []).map((l) =>
-    `<a href="${esc(normalizeLink(l))}" target="_blank" rel="noopener">${esc(l.replace(/^https?:\/\//, ''))}</a>`).join('');
 
   const isMe = state.me && state.me.id === p.id;
   const connected = state.myConnections.has(p.id);
@@ -170,25 +252,16 @@ function cardHtml(p) {
     action = `<button class="btn small primary" data-connect="${esc(p.id)}">Connect ✦</button>`;
   }
 
-  // "try their app" block: link to open it + record that you tried it + feedback quotes
-  const projectTries = state.tries.filter((t) => t.to === p.id);
-  const quotes = projectTries.filter((t) => t.comment).slice(-2).map((t) => {
-    const who = state.people.find((x) => x.id === t.from);
-    return `<blockquote class="try-quote">“${esc(t.comment)}”${who ? ` <span>— ${esc(who.name)}</span>` : ''}</blockquote>`;
-  }).join('');
-  let tryBlock = '';
-  if (!isMe && (p.links || []).length) {
-    const tried = state.myTries.has(p.id);
-    tryBlock = `<div class="try-row">
-      <a class="btn small" href="${esc(normalizeLink(p.links[0]))}" target="_blank" rel="noopener">Try it 🚀</a>
-      ${tried
-        ? `<button class="btn small connected" disabled>Tried 🧪✓</button>`
-        : `<button class="btn small ghost" data-try="${esc(p.id)}">I tried it 🧪</button>`}
-      ${projectTries.length ? `<span class="try-count">${projectTries.length} tried it</span>` : ''}
-    </div>${quotes}`;
-  } else if (projectTries.length) {
-    tryBlock = `<div class="try-row"><span class="try-count">🧪 ${projectTries.length} tried this project</span></div>${quotes}`;
-  }
+  const projHtml = projectsOf(p.id).map((pr) => `
+    <div class="proj">
+      <div class="proj-head"><strong>${esc(pr.name)}</strong>
+        ${pr.members.length > 1 ? `<span class="proj-team">👥 ${pr.members.length}</span>` : ''}</div>
+      ${pr.oneLiner ? `<div class="card-oneliner">${esc(pr.oneLiner)}</div>` : ''}
+      ${(pr.categories || []).length ? `<div class="badges">${pr.categories.map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}</div>` : ''}
+      ${(pr.links || []).length ? `<div class="card-links">${pr.links.map((l) =>
+        `<a href="${esc(normalizeLink(l))}" target="_blank" rel="noopener">${esc(l.replace(/^https?:\/\//, ''))}</a>`).join('')}</div>` : ''}
+      ${tryRowHtml(pr)}
+    </div>`).join('');
 
   return `<article class="card">
     <div class="card-head">
@@ -198,22 +271,148 @@ function cardHtml(p) {
         ${p.role ? `<div class="card-role">${esc(p.role)}</div>` : ''}
         ${place ? `<div class="card-place">📍 ${esc(place)}</div>` : ''}
       </div>
-    </div>
-    <div class="badges">
-      ${p.category ? `<span class="badge cat">${esc(p.category)}</span>` : ''}
       ${p.profileType ? `<span class="badge type-${esc(p.profileType)}">${esc(p.profileType)}</span>` : ''}
     </div>
-    ${p.project ? `<div class="card-project"><strong>${esc(p.project)}</strong></div>` : ''}
-    ${p.oneLiner ? `<div class="card-oneliner">${esc(p.oneLiner)}</div>` : ''}
+    ${projHtml}
     ${p.lookingFor ? `<div class="looking-for"><b>Looking for</b>${esc(p.lookingFor)}</div>` : ''}
-    ${links ? `<div class="card-links">${links}</div>` : ''}
-    ${tryBlock}
     <div class="card-foot">
       <div class="contact-icons">${contacts}</div>
       ${action}
     </div>
   </article>`;
 }
+
+/* ---------- projects view ---------- */
+
+function renderProjectCards() {
+  const q = $('#psearch').value.trim().toLowerCase();
+  const cat = $('#pfilter-category').value;
+  const visible = state.projects.filter((pr) => {
+    if (cat && !(pr.categories || []).includes(cat)) return false;
+    if (q) {
+      const team = membersOf(pr).map((m) => m.name);
+      const hay = [pr.name, pr.oneLiner, ...(pr.categories || []), ...team].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  $('#projects-count').textContent =
+    `${visible.length} project${visible.length === 1 ? '' : 's'}` +
+    (visible.length !== state.projects.length ? ` (of ${state.projects.length})` : '');
+  $('#projects-empty').classList.toggle('hidden', state.projects.length > 0);
+  $('#project-cards').innerHTML = visible.map(projectCardHtml).join('');
+  bindCardActions('#project-cards');
+}
+
+function projectCardHtml(pr) {
+  const img = projectImage(pr);
+  const team = membersOf(pr);
+  const countries = [...new Set(team.map((m) => m.country).filter(Boolean))].join(' · ');
+  return `<article class="card project-card">
+    ${img ? `<img class="proj-banner" src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()" />` : ''}
+    <div class="card-name">${esc(pr.name)}</div>
+    ${pr.oneLiner ? `<div class="card-oneliner">${esc(pr.oneLiner)}</div>` : ''}
+    ${(pr.categories || []).length ? `<div class="badges">${pr.categories.map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}</div>` : ''}
+    ${(pr.links || []).length ? `<div class="card-links">${pr.links.map((l) =>
+      `<a href="${esc(normalizeLink(l))}" target="_blank" rel="noopener">${esc(l.replace(/^https?:\/\//, ''))}</a>`).join('')}</div>` : ''}
+    <div class="proj-members">
+      ${team.map((m) => `<span class="member-chip" title="${esc(m.role || '')}">${avatarHtml(m, 'avatar avatar-xs')} ${esc(m.name)}</span>`).join('')}
+      ${countries ? `<span class="card-place">📍 ${esc(countries)}</span>` : ''}
+    </div>
+    ${tryRowHtml(pr)}
+  </article>`;
+}
+
+['#psearch', '#pfilter-category'].forEach((sel) => $(sel).addEventListener('input', renderProjectCards));
+['#search', '#filter-category', '#filter-type', '#filter-country'].forEach((sel) =>
+  $(sel).addEventListener('input', renderCards));
+
+/* ---------- map view ---------- */
+
+function renderMap() {
+  if (typeof L === 'undefined') {
+    $('#map-note').textContent = 'Map library could not load (no internet?).';
+    return;
+  }
+  if (!state.map) {
+    state.map = L.map('map', { worldCopyJump: true }).setView([-10, -40], 3);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 12,
+    }).addTo(state.map);
+    state.mapMarkers = L.layerGroup().addTo(state.map);
+    document.querySelectorAll('#map-mode input').forEach((r) => r.addEventListener('change', renderMap));
+  }
+  state.map.invalidateSize();
+  state.mapMarkers.clearLayers();
+
+  const mode = document.querySelector('#map-mode input:checked').value;
+  let located = 0, unlocated = [];
+
+  // exact city coords when the profile was geocoded, country centroid otherwise
+  const personPos = (p) => {
+    if (typeof p.lat === 'number' && typeof p.lon === 'number') {
+      return { lat: p.lat, lon: p.lon, label: [p.city, p.country].filter(Boolean).join(', '), exact: true };
+    }
+    const c = countryCoord(p.country);
+    return c ? { lat: c.lat, lon: c.lon, label: c.label, exact: false } : null;
+  };
+
+  // spread markers that share a spot on a small ring so they don't overlap
+  const addMarker = (() => {
+    const seen = {};
+    return (pos, color, popup) => {
+      const key = `${pos.lat.toFixed(2)},${pos.lon.toFixed(2)}`;
+      const i = seen[key] = (seen[key] || 0) + 1;
+      const r = pos.exact ? 0.015 : 0.7;
+      const dy = i === 1 ? 0 : r * Math.sin(i * 2.4);
+      const dx = i === 1 ? 0 : r * 1.3 * Math.cos(i * 2.4);
+      L.circleMarker([pos.lat + dy, pos.lon + dx], {
+        radius: 9, color, weight: 2, fillColor: color, fillOpacity: 0.55,
+      }).bindPopup(popup).addTo(state.mapMarkers);
+    };
+  })();
+
+  if (mode === 'people') {
+    for (const p of state.people) {
+      const pos = personPos(p);
+      if (!pos) { unlocated.push(p.name); continue; }
+      const projs = projectsOf(p.id).map((pr) => pr.name).join(', ');
+      addMarker(pos, '#3987e5',
+        `<strong>${esc(p.name)}</strong><br>${esc(pos.label)}` +
+        (projs ? `<br>🛠 ${esc(projs)}` : '') +
+        (p.telegram ? `<br><a href="${esc(handleUrl('telegram', p.telegram))}" target="_blank">✈ ${esc(p.telegram)}</a>` : ''));
+      located++;
+    }
+  } else {
+    for (const pr of state.projects) {
+      const team = membersOf(pr);
+      const positions = [];
+      const seenKeys = new Set();
+      for (const m of team) {
+        const pos = personPos(m);
+        if (!pos) continue;
+        const key = `${pos.lat.toFixed(1)},${pos.lon.toFixed(1)}`;
+        if (!seenKeys.has(key)) { seenKeys.add(key); positions.push(pos); }
+      }
+      if (!positions.length) { unlocated.push(pr.name); continue; }
+      const names = team.map((m) => m.name).join(', ');
+      positions.forEach((pos) => addMarker(pos, '#d95926',
+        `<strong>${esc(pr.name)}</strong>` +
+        (pr.oneLiner ? `<br>${esc(pr.oneLiner)}` : '') +
+        `<br>👥 ${esc(names)}` +
+        ((pr.links || []).length ? `<br><a href="${esc(normalizeLink(pr.links[0]))}" target="_blank">${esc(pr.links[0])}</a>` : '')));
+      located++;
+    }
+  }
+
+  const layers = state.mapMarkers.getLayers();
+  if (layers.length) state.map.fitBounds(L.featureGroup(layers).getBounds().pad(0.3), { maxZoom: 5 });
+  $('#map-note').textContent = unlocated.length
+    ? `${located} located · not shown (country not recognized or empty): ${unlocated.slice(0, 4).join(', ')}${unlocated.length > 4 ? '…' : ''}`
+    : (located ? `${located} located` : 'Nothing to show yet — join and set your country!');
+}
+
+/* ---------- actions ---------- */
 
 async function connect(toId, btn) {
   if (!state.me) {
@@ -232,38 +431,117 @@ async function connect(toId, btn) {
   }
 }
 
-async function markTried(toId, btn) {
+async function markTried(projectId) {
   if (!state.me) {
     toast('Join first so we know who tried it ✦');
     show('join');
     return;
   }
-  const comment = window.prompt('Nice! Any quick feedback for them? (optional)') || '';
+  const comment = window.prompt('Nice! Any quick feedback for the team? (optional)') || '';
   try {
-    await api('/api/tries', { body: { from: state.me.id, to: toId, token: state.me.token, comment } });
-    state.myTries.add(toId);
+    await api('/api/tries', { body: { from: state.me.id, to: projectId, token: state.me.token, comment } });
+    state.myTries.add(projectId);
     localStorage.setItem('ssc-tries', JSON.stringify([...state.myTries]));
     toast('Recorded — thanks for trying their project! 🧪');
-    loadPeople();
+    loadData();
   } catch (e) {
     toast(e.message);
   }
 }
 
-['#search', '#filter-category', '#filter-type', '#filter-country'].forEach((sel) =>
-  $(sel).addEventListener('input', renderCards));
+async function joinProject(projectId) {
+  if (!state.me) {
+    toast('Join the board first, then you can join a team ✦');
+    show('join');
+    return;
+  }
+  const pr = state.projects.find((x) => x.id === projectId);
+  if (!window.confirm(`Join the team of “${pr ? pr.name : 'this project'}”?`)) return;
+  try {
+    await api(`/api/projects/${projectId}/join`, { body: { personId: state.me.id, token: state.me.token } });
+    toast('You joined the team! 🎉');
+    loadData();
+  } catch (e) {
+    toast(e.message);
+  }
+}
 
 /* ---------- join form ---------- */
 
 const form = $('#join-form');
-$('#category-select').innerHTML =
-  '<option value="">Pick a category…</option>' + CATEGORIES.map((c) => `<option>${c}</option>`).join('');
 
-$('#add-link').addEventListener('click', () => {
-  if (document.querySelectorAll('.link-input').length >= 5) return;
-  const label = document.createElement('label');
-  label.innerHTML = '<input class="link-input" maxlength="300" placeholder="https://…" />';
-  $('#links-wrap').appendChild(label);
+function projectBlockEl(data = {}) {
+  const el = document.createElement('div');
+  el.className = 'project-block';
+  el.dataset.id = data.id || '';
+
+  if (data.joinOnly) {
+    el.dataset.kind = 'join';
+    el.innerHTML = `<div class="project-block-head">
+      <span>Joining <strong>${esc(data.name)}</strong> · team of ${data.members.length}</span>
+      <button type="button" class="btn ghost small pb-remove">✕ Cancel</button></div>`;
+  } else {
+    el.dataset.kind = data.id ? 'edit' : 'new';
+    el.innerHTML = `
+      <div class="project-block-head">
+        <strong>${data.id ? esc(data.name) : 'New project'}</strong>
+        <button type="button" class="btn ghost small pb-remove">✕ ${data.id ? 'Leave project' : 'Remove'}</button>
+      </div>
+      <div class="grid-2">
+        <label>Project name *<input class="pb-name" maxlength="160" value="${esc(data.name || '')}" placeholder="My cool dApp" /></label>
+        <label>One-liner<input class="pb-oneliner" maxlength="280" value="${esc(data.oneLiner || '')}" placeholder="What does it do?" /></label>
+      </div>
+      <span class="mini-label">Categories (pick any)</span>
+      <div class="pb-cats">${CATEGORIES.map((c) =>
+        `<label class="cat-chip"><input type="checkbox" value="${esc(c)}"${(data.categories || []).includes(c) ? ' checked' : ''} /><span>${esc(c)}</span></label>`).join('')}</div>
+      <span class="mini-label">Links (site, demo, repo…)</span>
+      <div class="pb-links">${(data.links && data.links.length ? data.links : ['']).map((l) =>
+        `<input class="pb-link" maxlength="300" value="${esc(l)}" placeholder="https://…" />`).join('')}</div>
+      <div class="pb-tools">
+        <button type="button" class="btn ghost small pb-add-link">+ link</button>
+        <label class="btn ghost small">Project image<input type="file" class="pb-image" accept="image/*" hidden /></label>
+        <span class="mini-label pb-image-note">${data.imageUrl ? 'image uploaded ✓' : 'no image → we screenshot your first link'}</span>
+      </div>`;
+  }
+
+  el.querySelector('.pb-remove').addEventListener('click', () => { el.remove(); refreshExistingOptions(); });
+  el.querySelector('.pb-add-link')?.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.className = 'pb-link';
+    input.maxLength = 300;
+    input.placeholder = 'https://…';
+    el.querySelector('.pb-links').appendChild(input);
+  });
+  el.querySelector('.pb-image')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    el._imageDataUrl = await resizeImage(file, 900);
+    el.querySelector('.pb-image-note').textContent = 'image ready ✓';
+  });
+  return el;
+}
+
+$('#btn-new-project').addEventListener('click', () =>
+  $('#my-projects').appendChild(projectBlockEl()));
+
+function refreshExistingOptions() {
+  const sel = $('#existing-projects');
+  if (!sel) return;
+  const blockIds = new Set([...document.querySelectorAll('.project-block')]
+    .map((el) => el.dataset.id).filter(Boolean));
+  const options = state.projects.filter((pr) =>
+    !blockIds.has(pr.id) && !(state.me && pr.members.includes(state.me.id)));
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">Join an existing project…</option>' +
+    options.map((pr) => `<option value="${esc(pr.id)}"${pr.id === prev ? ' selected' : ''}>${esc(pr.name)} · team of ${pr.members.length}</option>`).join('');
+}
+
+$('#existing-projects').addEventListener('change', () => {
+  const pr = state.projects.find((x) => x.id === $('#existing-projects').value);
+  if (pr) {
+    $('#my-projects').appendChild(projectBlockEl({ ...pr, joinOnly: true }));
+    refreshExistingOptions();
+  }
 });
 
 $('#photo-input').addEventListener('change', async (e) => {
@@ -294,28 +572,67 @@ function resizeImage(file, maxSide) {
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const status = $('#form-status');
-  const fd = new FormData(form);
-  const body = Object.fromEntries(fd.entries());
-  body.links = [...document.querySelectorAll('.link-input')].map((i) => i.value.trim()).filter(Boolean);
+  const btn = $('#submit-btn');
+  const body = Object.fromEntries(new FormData(form).entries());
   if (state.photoDataUrl) body.photo = state.photoDataUrl;
 
-  const btn = $('#submit-btn');
   btn.disabled = true;
   status.className = 'form-status';
   status.textContent = 'Saving…';
   try {
+    // find the city on the map (OpenStreetMap's free geocoder); country centroid is the fallback
+    if (body.city || body.country) {
+      try {
+        const q = [body.city, body.country].filter(Boolean).join(', ');
+        const geo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`)
+          .then((r) => r.json());
+        if (geo[0]) { body.lat = parseFloat(geo[0].lat); body.lon = parseFloat(geo[0].lon); }
+      } catch { /* offline — map falls back to country centroid */ }
+    }
     if (state.me) {
       body.token = state.me.token;
       await api(`/api/people/${state.me.id}`, { method: 'PUT', body });
-      toast('Profile updated ✦');
     } else {
       const { person, token } = await api('/api/people', { body });
       state.me = { id: person.id, token };
       localStorage.setItem('ssc-me', JSON.stringify(state.me));
-      toast('Welcome to the constellation ✦');
     }
+    const auth = { personId: state.me.id, token: state.me.token };
+
+    const keptIds = new Set();
+    for (const el of document.querySelectorAll('.project-block')) {
+      if (el.dataset.kind === 'join') {
+        keptIds.add(el.dataset.id);
+        await api(`/api/projects/${el.dataset.id}/join`, { body: auth });
+        continue;
+      }
+      const proj = {
+        ...auth,
+        name: el.querySelector('.pb-name').value.trim(),
+        oneLiner: el.querySelector('.pb-oneliner').value.trim(),
+        categories: [...el.querySelectorAll('.pb-cats input:checked')].map((i) => i.value),
+        links: [...el.querySelectorAll('.pb-link')].map((i) => i.value.trim()).filter(Boolean),
+      };
+      if (el._imageDataUrl) proj.image = el._imageDataUrl;
+      if (!proj.name) continue; // empty block — ignore
+      if (el.dataset.kind === 'edit') {
+        keptIds.add(el.dataset.id);
+        await api(`/api/projects/${el.dataset.id}`, { method: 'PUT', body: proj });
+      } else {
+        const { project } = await api('/api/projects', { body: proj });
+        keptIds.add(project.id);
+      }
+    }
+    for (const id of state.initialProjectIds) {
+      if (!keptIds.has(id)) await api(`/api/projects/${id}/leave`, { body: auth });
+    }
+    state.initialProjectIds = [...keptIds];
+
     status.classList.add('ok');
     status.textContent = 'Saved!';
+    toast('Welcome to the constellation ✦');
+    await loadData();
+    prefillMyProfile();
     show('builders');
   } catch (err) {
     status.classList.add('err');
@@ -325,46 +642,43 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-async function prefillMyProfile() {
+function prefillMyProfile() {
   if (!state.me) return;
-  try {
-    const { people } = await api('/api/people');
-    const me = people.find((p) => p.id === state.me.id);
-    if (!me) { // server data was reset — start fresh
-      state.me = null;
-      localStorage.removeItem('ssc-me');
-      return;
-    }
-    $('#form-title').textContent = 'Edit your profile';
-    $('#submit-btn').textContent = 'Update profile ✦';
-    for (const [k, v] of Object.entries(me)) {
-      const input = form.elements[k];
-      if (input && typeof v === 'string') {
-        if (input instanceof RadioNodeList) input.value = v;
-        else input.value = v;
-      }
-    }
-    const linkInputs = () => [...document.querySelectorAll('.link-input')];
-    (me.links || []).forEach((l, i) => {
-      if (!linkInputs()[i]) $('#add-link').click();
-      linkInputs()[i].value = l;
-    });
-    if (me.photoUrl) {
-      const prev = $('#photo-preview');
-      prev.style.backgroundImage = `url(${me.photoUrl})`;
-      prev.textContent = '';
-    }
-  } catch { /* offline or server restarting — leave the blank form */ }
+  const me = state.people.find((p) => p.id === state.me.id);
+  if (!me) { // server data was reset — start fresh
+    state.me = null;
+    localStorage.removeItem('ssc-me');
+    return;
+  }
+  $('#form-title').textContent = 'Edit your profile';
+  $('#submit-btn').textContent = 'Update profile ✦';
+  for (const [k, v] of Object.entries(me)) {
+    const input = form.elements[k];
+    if (input && typeof v === 'string') input.value = v;
+  }
+  if (me.photoUrl) {
+    const prev = $('#photo-preview');
+    prev.style.backgroundImage = `url(${me.photoUrl})`;
+    prev.textContent = '';
+  }
+  const mine = projectsOf(me.id);
+  state.initialProjectIds = mine.map((pr) => pr.id);
+  const wrap = $('#my-projects');
+  wrap.innerHTML = '';
+  mine.forEach((pr) => wrap.appendChild(projectBlockEl(pr)));
+  refreshExistingOptions();
 }
 
 /* ---------- metrics ---------- */
 
 async function loadMetrics() {
-  const [stats, { people }] = await Promise.all([api('/api/stats'), api('/api/people')]);
-  const byId = Object.fromEntries(people.map((p) => [p.id, p]));
+  const [stats] = await Promise.all([api('/api/stats'), loadData()]);
+  const personById = Object.fromEntries(state.people.map((p) => [p.id, p]));
+  const projectById = Object.fromEntries(state.projects.map((p) => [p.id, p]));
 
   $('#stat-tiles').innerHTML = [
     [stats.totalPeople, 'Builders'],
+    [stats.totalProjects, 'Projects'],
     [stats.totalConnections, 'Connections'],
     [stats.mutualConnections, 'Mutual matches'],
     [stats.totalTries, 'Projects tried'],
@@ -372,7 +686,7 @@ async function loadMetrics() {
   ].map(([v, label]) =>
     `<div class="tile"><div class="tile-value">${v}</div><div class="tile-label">${label}</div></div>`).join('');
 
-  // Builders by category — single-hue horizontal bars, direct value labels
+  // Projects by category — single-hue horizontal bars, direct value labels
   const cats = Object.entries(stats.byCategory).sort((a, b) => b[1] - a[1]);
   const max = Math.max(1, ...cats.map(([, n]) => n));
   $('#chart-category').innerHTML = cats.length
@@ -398,30 +712,28 @@ async function loadMetrics() {
         `<div class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${label} · ${n}</div>`).join('')}</div>`
     : '<p class="count-line">No data yet.</p>';
 
-  // Most connected
   $('#top-connectors').innerHTML = stats.topConnectors.length
     ? stats.topConnectors.map(({ id, count }) => {
-        const p = byId[id];
+        const p = personById[id];
         if (!p) return '';
         return `<li>${avatarHtml(p)}<span>${esc(p.name)}</span>
           <span class="conn-count">${count} connection${count === 1 ? '' : 's'}</span></li>`;
       }).join('')
     : '<li class="count-line">No connections yet — hit “Connect ✦” on someone’s card!</li>';
 
-  // Most tried projects
   $('#top-tried').innerHTML = stats.topTried.length
     ? stats.topTried.map(({ id, count }) => {
-        const p = byId[id];
-        if (!p) return '';
-        return `<li>${avatarHtml(p)}<span>${esc(p.project || p.name)}</span>
+        const pr = projectById[id];
+        if (!pr) return '';
+        const team = membersOf(pr);
+        return `<li>${team[0] ? avatarHtml(team[0]) : ''}<span>${esc(pr.name)}</span>
           <span class="conn-count">🧪 ${count}</span></li>`;
       }).join('')
     : '<li class="count-line">Try someone’s app and hit “I tried it 🧪”!</li>';
 
-  // Recent connections feed
   $('#recent-connections').innerHTML = stats.recentConnections.length
     ? stats.recentConnections.map((c) => {
-        const a = byId[c.from]; const b = byId[c.to];
+        const a = personById[c.from]; const b = personById[c.to];
         if (!a || !b) return '';
         const t = new Date(c.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         return `<li>${esc(a.name)}<span class="conn-arrow">→✦←</span>${esc(b.name)}<time>${t}</time></li>`;
@@ -429,14 +741,36 @@ async function loadMetrics() {
     : '<li class="count-line">Connections will show up here.</li>';
 }
 
+/* ---------- export ---------- */
+
+async function download(path, filename) {
+  const res = await fetch(path, { headers: { 'x-event-key': state.key } });
+  if (!res.ok) { toast('Export failed'); return; }
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+$('#export-json').addEventListener('click', () =>
+  download('/api/export', `stellar-summit-connect-${new Date().toISOString().slice(0, 10)}.json`));
+$('#export-csv').addEventListener('click', () =>
+  download('/api/export/people.csv', 'stellar-summit-people.csv'));
+
 /* ---------- boot ---------- */
 
-const initialView = ['builders', 'join', 'metrics'].includes(location.hash.slice(1))
+const initialView = ['builders', 'projects', 'constellation', 'map', 'join', 'metrics'].includes(location.hash.slice(1))
   ? location.hash.slice(1) : 'builders';
-show(initialView);
-loadPeople().then(prefillMyProfile);
+loadData()
+  .then(() => {
+    prefillMyProfile();
+    show(initialView);
+  })
+  .catch(() => showGate()); // no/wrong event password yet
 setInterval(() => {
   const active = document.querySelector('.tab.active')?.dataset.view;
-  if (active === 'builders') loadPeople();
+  if (active === 'builders' || active === 'projects') loadData();
   if (active === 'metrics') loadMetrics();
 }, 20000); // live-ish refresh while projected on a screen

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Stellar Summit Connect · São Paulo</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -19,6 +20,9 @@
   </div>
   <nav class="tabs" role="tablist">
     <button class="tab active" data-view="builders">Builders</button>
+    <button class="tab" data-view="projects">Projects</button>
+    <button class="tab" data-view="constellation">Constellation ✦</button>
+    <button class="tab" data-view="map">Map</button>
     <button class="tab" data-view="join">Join</button>
     <button class="tab" data-view="metrics">Metrics</button>
   </nav>
@@ -26,7 +30,7 @@
 
 <main>
 
-  <!-- ============ BUILDERS (dashboard) ============ -->
+  <!-- ============ BUILDERS ============ -->
   <section id="view-builders" class="view">
     <div class="filters-row">
       <input id="search" type="search" placeholder="Search name, project, what they're looking for…" />
@@ -47,7 +51,51 @@
     </div>
   </section>
 
-  <!-- ============ JOIN (form) ============ -->
+  <!-- ============ PROJECTS ============ -->
+  <section id="view-projects" class="view hidden">
+    <div class="filters-row">
+      <input id="psearch" type="search" placeholder="Search projects…" />
+      <select id="pfilter-category"><option value="">All categories</option></select>
+    </div>
+    <p id="projects-count" class="count-line"></p>
+    <div id="project-cards" class="cards"></div>
+    <div id="projects-empty" class="empty hidden">
+      <p>No projects yet — add yours! ✦</p>
+      <button class="btn primary" data-goto="join">Create a project</button>
+    </div>
+  </section>
+
+  <!-- ============ CONSTELLATION ============ -->
+  <section id="view-constellation" class="view hidden">
+    <div class="legend constellation-legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:#3987e5;border-radius:50%"></span>Technical</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#d95926;border-radius:50%"></span>Business</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#199e70;border-radius:50%"></span>Both</div>
+      <div class="legend-item"><span class="legend-swatch cv-diamond"></span>Project</div>
+      <div class="legend-item"><span class="legend-line" style="background:#3987e5"></span>connected</div>
+      <div class="legend-item"><span class="legend-line legend-dashed"></span>tried it</div>
+      <div class="legend-item"><span class="legend-line" style="background:rgba(255,255,255,.25)"></span>team</div>
+      <span class="count-line">drag the stars · click for details</span>
+    </div>
+    <div id="constellation-wrap">
+      <canvas id="constellation"></canvas>
+      <div id="cv-tip" class="cv-tip hidden"></div>
+    </div>
+  </section>
+
+  <!-- ============ MAP ============ -->
+  <section id="view-map" class="view hidden">
+    <div class="filters-row map-toggle-row">
+      <div class="segmented" id="map-mode">
+        <label><input type="radio" name="mapMode" value="people" checked /> People</label>
+        <label><input type="radio" name="mapMode" value="projects" /> Projects</label>
+      </div>
+      <p class="count-line" id="map-note"></p>
+    </div>
+    <div id="map"></div>
+  </section>
+
+  <!-- ============ JOIN ============ -->
   <section id="view-join" class="view hidden">
     <form id="join-form" class="panel">
       <h2 id="form-title">Add yourself to the map</h2>
@@ -62,15 +110,7 @@
       <div class="grid-2">
         <label>Name *<input name="name" required maxlength="120" placeholder="Ada Lovelace" /></label>
         <label>Role<input name="role" maxlength="120" placeholder="Founder, dev, BD…" /></label>
-        <label>Project<input name="project" maxlength="160" placeholder="What are you building?" /></label>
-        <label>Category
-          <select name="category" id="category-select"></select>
-        </label>
       </div>
-
-      <label>One-liner of your project
-        <input name="oneLiner" maxlength="280" placeholder="Cross-border payments for freelancers on Stellar" />
-      </label>
 
       <fieldset class="segmented">
         <legend>I am…</legend>
@@ -88,17 +128,18 @@
 
       <label>Email<input name="email" type="email" maxlength="160" placeholder="you@project.xyz" /></label>
 
-      <div id="links-wrap">
-        <label>Project links
-          <input class="link-input" maxlength="300" placeholder="https://myproject.xyz" />
-        </label>
-      </div>
-      <button type="button" id="add-link" class="btn ghost small">+ Add another link</button>
-
       <label>What are you looking for?
         <textarea name="lookingFor" maxlength="1200" rows="4"
           placeholder="Co-founder? Design help? Anchors in LatAm? Intros to wallets? Pilot users? Say what would make this event a win for you."></textarea>
       </label>
+
+      <h3 class="section-title">Your projects</h3>
+      <p class="form-hint">Create a project or join one that's already on the board — you can be in more than one, and each project can have several categories.</p>
+      <div id="my-projects"></div>
+      <div class="project-adder">
+        <button type="button" id="btn-new-project" class="btn ghost">+ New project</button>
+        <select id="existing-projects"><option value="">Join an existing project…</option></select>
+      </div>
 
       <button type="submit" class="btn primary big" id="submit-btn">Join the constellation ✦</button>
       <p id="form-status" class="form-status"></p>
@@ -107,11 +148,15 @@
 
   <!-- ============ METRICS ============ -->
   <section id="view-metrics" class="view hidden">
+    <div class="export-row">
+      <button id="export-json" class="btn ghost small">⬇ Export full database (JSON)</button>
+      <button id="export-csv" class="btn ghost small">⬇ Contacts (CSV)</button>
+    </div>
     <div id="stat-tiles" class="tiles"></div>
 
     <div class="metrics-grid">
       <div class="panel">
-        <h3>Builders by category</h3>
+        <h3>Projects by category</h3>
         <div id="chart-category" class="hbar-chart"></div>
       </div>
 
@@ -141,6 +186,20 @@
 
 <div id="toast" class="toast hidden"></div>
 
+<div id="gate" class="gate hidden">
+  <form id="gate-form" class="panel gate-panel">
+    <span class="brand-star" style="font-size:40px">✦</span>
+    <h2>Stellar Summit Connect</h2>
+    <p class="form-hint">Enter the event password to continue — ask the organizers if you don't have it.</p>
+    <input id="gate-input" type="password" placeholder="Event password" autocomplete="off" />
+    <button class="btn primary big">Enter ✦</button>
+    <p id="gate-status" class="form-status err"></p>
+  </form>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="countries.js"></script>
 <script src="app.js"></script>
+<script src="constellation.js"></script>
 </body>
 </html>

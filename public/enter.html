@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Entering…</title>
+<script>
+  // QR-friendly entry: /enter.html?key=EVENTPASSWORD&view=builders
+  const params = new URLSearchParams(location.search);
+  if (params.get('key')) localStorage.setItem('ssc-key', params.get('key'));
+  location.replace('/#' + (params.get('view') || 'builders'));
+</script>
+</head>
+<body></body>
+</html>
