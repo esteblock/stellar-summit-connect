@@ -431,7 +431,10 @@ function personCardHtml(p) {
       <div class="proj-head"><strong>${pr.iconUrl ? `<img class="proj-mini-icon" src="${esc(pr.iconUrl)}" alt="" loading="lazy" />` : ''}${esc(pr.name)}</strong>
         ${pr.members.length > 1 ? `<span class="proj-team">👥 ${pr.members.length}</span>` : ''}</div>
       ${pr.oneLiner ? `<div class="card-oneliner">${esc(pr.oneLiner)}</div>` : ''}
-      ${(pr.categories || []).length ? `<div class="badges">${pr.categories.map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}</div>` : ''}
+      ${(pr.categories || []).length || pr.stage ? `<div class="badges">
+        ${pr.stage ? `<span class="badge stage-${esc(pr.stage)}">${esc(pr.stage)}</span>` : ''}
+        ${(pr.categories || []).map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}
+      </div>` : ''}
       ${(pr.links || []).length ? `<div class="card-links">${pr.links.map((l) =>
         `<a href="${esc(normalizeLink(l))}" target="_blank" rel="noopener">${esc(l.replace(/^https?:\/\//, ''))}</a>`).join('')}</div>` : ''}
       ${tryRowHtml(pr)}
@@ -464,8 +467,10 @@ const triesOf = (projectId) => state.tries.filter((t) => t.to === projectId).len
 function renderProjectCards() {
   const q = $('#psearch').value.trim().toLowerCase();
   const cat = $('#pfilter-category').value;
+  const stage = $('#pfilter-stage').value;
   const visible = state.projects.filter((pr) => {
     if (cat && !(pr.categories || []).includes(cat)) return false;
+    if (stage && pr.stage !== stage) return false;
     if (q) {
       const team = membersOf(pr).map((m) => m.name);
       const hay = [pr.name, pr.oneLiner, ...(pr.categories || []), ...team].filter(Boolean).join(' ').toLowerCase();
@@ -507,7 +512,10 @@ function projectCardHtml(pr, rank = 99) {
     ${pr.oneLiner ? `<div class="card-oneliner">${esc(pr.oneLiner)}</div>` : ''}
     ${pr.customer ? `<div class="card-oneliner">🎯 <strong>Customer:</strong> ${esc(pr.customer)}</div>` : ''}
     ${pr.lookingFor ? `<div class="looking-for"><b>Project looking for</b>${esc(pr.lookingFor)}</div>` : ''}
-    ${(pr.categories || []).length ? `<div class="badges">${pr.categories.map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}</div>` : ''}
+    ${(pr.categories || []).length || pr.stage ? `<div class="badges">
+      ${pr.stage ? `<span class="badge stage-${esc(pr.stage)}">${esc(pr.stage)}</span>` : ''}
+      ${(pr.categories || []).map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}
+    </div>` : ''}
     <div class="crew">
       <div class="crew-stack">${team.map((m) => avatarHtml(m, 'avatar avatar-xs')).join('')}</div>
       <span class="crew-names">${esc(team.map((m) => m.name.split(' ')[0]).join(', '))}</span>
@@ -543,7 +551,7 @@ function bindHoloCards() {
   });
 }
 
-['#psearch', '#pfilter-category'].forEach((sel) => $(sel).addEventListener('input', renderProjectCards));
+['#psearch', '#pfilter-category', '#pfilter-stage'].forEach((sel) => $(sel).addEventListener('input', renderProjectCards));
 ['#search', '#filter-category', '#filter-type', '#filter-country'].forEach((sel) =>
   $(sel).addEventListener('input', renderCards));
 
@@ -848,6 +856,12 @@ function projectBlockEl(data = {}) {
         <label>One-liner<input class="pb-oneliner" maxlength="280" value="${esc(data.oneLiner || '')}" placeholder="What does it do?" /></label>
         <label>Who is your customer?<input class="pb-customer" maxlength="200" value="${esc(data.customer || '')}" placeholder="Neobanks in LatAm, DeFi degens…" /></label>
         <label>What is this project looking for?<input class="pb-lookingfor" maxlength="500" value="${esc(data.lookingFor || '')}" placeholder="Pilot users, integrations, an anchor…" /></label>
+        <label>Stage
+          <select class="pb-stage">
+            <option value="">Where are you at?</option>
+            ${['Idea', 'MVP', 'Testnet', 'Mainnet'].map((s) => `<option${data.stage === s ? ' selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </label>
       </div>
       <span class="mini-label">Categories (pick any)</span>
       <div class="pb-cats">${CATEGORIES.map((c) =>
@@ -983,6 +997,7 @@ form.addEventListener('submit', async (e) => {
         oneLiner: el.querySelector('.pb-oneliner').value.trim(),
         customer: el.querySelector('.pb-customer').value.trim(),
         lookingFor: el.querySelector('.pb-lookingfor').value.trim(),
+        stage: el.querySelector('.pb-stage').value,
         categories: [...el.querySelectorAll('.pb-cats input:checked')].map((i) => i.value),
         links: [...el.querySelectorAll('.pb-link')].map((i) => i.value.trim()).filter(Boolean),
       };

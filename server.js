@@ -130,8 +130,12 @@ function cleanPerson(body) {
   return p;
 }
 
+const PROJECT_STAGES = ['Idea', 'MVP', 'Testnet', 'Mainnet'];
+
 function cleanProject(body) {
   const p = cleanText(body, PROJECT_FIELDS);
+  if (PROJECT_STAGES.includes(body.stage)) p.stage = body.stage;
+  else if (body.stage === '') p.stage = undefined;
   const categories = cleanStringArray(body.categories, 60, 4);
   if (categories) p.categories = categories;
   const links = cleanStringArray(body.links, 300, 5);
@@ -182,7 +186,7 @@ function matchBlurb(p) {
     .filter((pr) => pr.members.includes(p.id))
     .map((pr) => ({
       name: pr.name, oneLiner: pr.oneLiner, categories: pr.categories,
-      customer: pr.customer, lookingFor: pr.lookingFor,
+      stage: pr.stage, customer: pr.customer, lookingFor: pr.lookingFor,
     }));
   return {
     id: p.id, name: p.name, role: p.role, profile: p.profileType,

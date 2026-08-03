@@ -108,6 +108,10 @@ img.avatar { object-fit: cover; }
   border: 1px solid var(--border); color: var(--ink-2); background: var(--surface-2);
 }
 .badge.cat { color: #9ec5f4; border-color: rgba(57, 135, 229, 0.35); }
+.badge.stage-Idea { color: #c3c2b7; border-color: rgba(195, 194, 183, 0.4); }
+.badge.stage-MVP { color: #e094b4; border-color: rgba(213, 81, 129, 0.45); }
+.badge.stage-Testnet { color: #e8b45c; border-color: rgba(201, 133, 0, 0.5); }
+.badge.stage-Mainnet { color: #5fc99a; border-color: rgba(25, 158, 112, 0.55); }
 .badge.type-Technical { color: #86b6ef; }
 .badge.type-Business { color: #f0a482; }
 .badge.type-Both { color: #7fd0b0; }
