@@ -266,6 +266,9 @@ function tryRowHtml(pr) {
     }
   }
   if (!amMember) parts.push(`<button class="btn small ghost" data-joinproj="${esc(pr.id)}">Join team +</button>`);
+  if (state.me && pr.createdBy === state.me.id) {
+    parts.push(`<button class="btn small ghost" data-editproj="${esc(pr.id)}">Edit ✎</button>`);
+  }
   if (projectTries.length) parts.push(`<span class="try-count">${projectTries.length} tried it</span>`);
   return (parts.length ? `<div class="try-row">${parts.join('')}</div>` : '') + quotes;
 }
@@ -315,6 +318,8 @@ function bindCardActions(rootSel) {
     btn.addEventListener('click', () => markTried(btn.dataset.try)));
   document.querySelectorAll(`${rootSel} [data-joinproj]`).forEach((btn) =>
     btn.addEventListener('click', () => joinProject(btn.dataset.joinproj)));
+  document.querySelectorAll(`${rootSel} [data-editproj]`).forEach((btn) =>
+    btn.addEventListener('click', () => editProject(btn.dataset.editproj)));
   document.querySelectorAll(`${rootSel} [data-goto]`).forEach((btn) =>
     btn.addEventListener('click', () => show(btn.dataset.goto)));
   document.querySelectorAll(`${rootSel} [data-qask]`).forEach((btn) =>
@@ -665,6 +670,17 @@ async function markTried(projectId) {
   } catch (e) {
     toast(e.message);
   }
+}
+
+function editProject(projectId) {
+  show('join');
+  setTimeout(() => {
+    const block = document.querySelector(`.project-block[data-id="${CSS.escape(projectId)}"]`);
+    if (!block) return;
+    block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    block.classList.add('flash');
+    setTimeout(() => block.classList.remove('flash'), 1800);
+  }, 100);
 }
 
 async function joinProject(projectId) {
