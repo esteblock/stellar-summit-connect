@@ -223,6 +223,13 @@ img.avatar { object-fit: cover; }
 .legend-item { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
 .legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
 
+.word-cloud {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline;
+  line-height: 1.3; padding: 4px 0;
+}
+.word-cloud span { cursor: default; transition: transform 0.12s; }
+.word-cloud span:hover { transform: scale(1.12); }
+
 .top-list { padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
 .top-list li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
 .top-list .avatar { width: 32px; height: 32px; font-size: 12px; }
@@ -444,14 +451,14 @@ img.avatar { object-fit: cover; }
 #constellation { width: 100%; height: 100%; display: block; touch-action: none; }
 .constellation-legend { margin: 16px 2px 12px; align-items: center; }
 .edge-toggle {
-  background: none; border: 1px solid transparent; border-radius: 999px;
-  padding: 4px 10px; cursor: pointer; font-family: inherit;
-  display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px;
+  padding: 5px 12px; cursor: pointer; font-family: inherit;
+  display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink);
 }
-.edge-toggle:hover { border-color: var(--border); background: var(--surface-2); }
-.edge-toggle.off { opacity: 0.35; }
-.edge-toggle.off > span:last-child,
-.edge-toggle.off { text-decoration: line-through; }
+.edge-toggle::before { content: '✓'; color: #5fc99a; font-weight: 700; font-size: 12px; }
+.edge-toggle:hover { border-color: var(--accent); }
+.edge-toggle.off { opacity: 0.45; color: var(--ink-muted); text-decoration: line-through; }
+.edge-toggle.off::before { content: '✕'; color: var(--ink-muted); text-decoration: none; }
 .legend-line { width: 18px; height: 2px; display: inline-block; }
 .legend-dashed {
   background: repeating-linear-gradient(90deg, #d95926 0 4px, transparent 4px 8px);

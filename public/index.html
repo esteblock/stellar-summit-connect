@@ -88,7 +88,8 @@
       <button class="legend-item edge-toggle" data-edge="conn" title="Show/hide connections"><span class="legend-line" style="background:#3987e5"></span>connected</button>
       <button class="legend-item edge-toggle" data-edge="try" title="Show/hide tried-it"><span class="legend-line legend-dashed"></span>tried it</button>
       <button class="legend-item edge-toggle" data-edge="member" title="Show/hide teams"><span class="legend-line" style="background:rgba(255,255,255,.25)"></span>team</button>
-      <span class="count-line">drag the stars · click for details · tap a line type to hide it</span>
+      <button id="cv-replay" class="btn ghost small" title="Replay how the constellation formed">⏪ Timelapse</button>
+      <span class="count-line">drag the stars · click for details · toggle line types above</span>
     </div>
     <div id="constellation-wrap">
       <canvas id="constellation"></canvas>
@@ -210,6 +211,16 @@
       <div class="panel">
         <h3>Technical vs Business</h3>
         <div id="chart-type"></div>
+      </div>
+
+      <div class="panel">
+        <h3>What the room is looking for 🔥</h3>
+        <div id="cloud-needs" class="word-cloud"></div>
+      </div>
+
+      <div class="panel">
+        <h3>What the room is building 🛠</h3>
+        <div id="cloud-building" class="word-cloud"></div>
       </div>
 
       <div class="panel">

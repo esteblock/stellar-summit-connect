@@ -1104,6 +1104,48 @@ function prefillMyProfile() {
   refreshExistingOptions();
 }
 
+/* ---------- word clouds (needs & building) ---------- */
+
+const CLOUD_STOP = new Set(('the,a,an,and,or,of,for,to,in,on,with,at,by,from,that,this,these,we,i,are,is,our,my,who,' +
+  'what,they,them,you,your,us,it,its,about,also,etc,want,need,needs,looking,will,can,into,not,but,' +
+  'de,la,el,los,las,un,una,unos,unas,y,o,u,que,para,en,con,por,sin,se,del,al,es,son,mi,mis,su,sus,como,mas,más,' +
+  'busco,buscamos,quiero,queremos,necesito,necesitamos,gente,algo,otro,otra,' +
+  'os,as,um,uma,e,ou,do,da,dos,das,no,na,nos,nas,com,sem,pra,para,quero,queremos,preciso,precisamos,and').split(','));
+
+function wordCounts(texts, max = 26) {
+  const counts = {};
+  const display = {};
+  for (const t of texts) {
+    for (const raw of String(t || '').split(/[^\p{L}\p{N}]+/u)) {
+      if (raw.length < 3) continue;
+      const key = raw.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      if (CLOUD_STOP.has(key) || CLOUD_STOP.has(raw.toLowerCase())) continue;
+      counts[key] = (counts[key] || 0) + 1;
+      if (!display[key]) display[key] = raw.toLowerCase();
+    }
+  }
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, max)
+    .map(([key, n]) => ({ word: display[key], n }));
+}
+
+// magnitude → sequential ramp (low → high steps, tuned for the dark surface)
+function renderCloud(sel, words, ramp) {
+  const el = $(sel);
+  if (!words.length) {
+    el.innerHTML = '<p class="count-line">Nothing here yet — it fills up as builders join.</p>';
+    return;
+  }
+  const max = words[0].n;
+  el.innerHTML = words.map(({ word, n }) => {
+    const s = Math.sqrt(n / max);
+    const size = (13 + s * 17).toFixed(1);
+    const color = ramp[Math.min(ramp.length - 1, Math.floor(s * ramp.length))];
+    return `<span style="font-size:${size}px;color:${color}" title="${esc(word)} · mentioned ${n}×">${esc(word)}</span>`;
+  }).join('');
+}
+
 /* ---------- metrics ---------- */
 
 async function loadMetrics() {
@@ -1156,6 +1198,19 @@ async function loadMetrics() {
           <span class="conn-count">${count} connection${count === 1 ? '' : 's'}</span></li>`;
       }).join('')
     : '<li class="count-line">No connections yet — hit “Connect ✦” on someone’s card!</li>';
+
+  // word clouds: what people/projects are looking for vs what they're building
+  renderCloud('#cloud-needs',
+    wordCounts([
+      ...state.people.map((p) => p.lookingFor),
+      ...state.projects.map((pr) => pr.lookingFor),
+    ]),
+    ['#256abf', '#3987e5', '#6da7ec', '#9ec5f4']);
+  renderCloud('#cloud-building',
+    wordCounts([
+      ...state.projects.flatMap((pr) => [pr.name, pr.oneLiner, pr.customer, ...(pr.categories || [])]),
+    ]),
+    ['#a34317', '#d95926', '#e77c47', '#f0a482']);
 
   $('#top-tried').innerHTML = stats.topTried.length
     ? stats.topTried.map(({ id, count }) => {

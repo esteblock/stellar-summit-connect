@@ -9,9 +9,20 @@ const CV = {
   hover: null, dragging: null, selected: null,
   images: {}, bgStars: [], posCache: {}, t: 0,
   filters: { conn: true, try: true, member: true }, // which edge kinds are visible
+  replay: null, // {min, max, begun, dur} while the timelapse is playing
+  simTime: Infinity,
 };
 
-const cvVisibleEdges = () => CV.edges.filter((e) => CV.filters[e.kind]);
+function cvSimTime() {
+  if (!CV.replay) return Infinity;
+  const p = Math.min(1, (performance.now() - CV.replay.begun) / CV.replay.dur);
+  return CV.replay.min + (CV.replay.max - CV.replay.min) * p;
+}
+
+const cvNodeVisible = (n) => n.bornAt <= CV.simTime;
+const cvVisibleEdges = () => CV.edges.filter((e) =>
+  CV.filters[e.kind] && e.bornAt <= CV.simTime &&
+  cvNodeVisible(CV.byId[e.a]) && cvNodeVisible(CV.byId[e.b]));
 
 const CV_COLORS = { Technical: '#3987e5', Business: '#d95926', Both: '#199e70', project: '#c98500' };
 
@@ -20,6 +31,9 @@ async function renderConstellation() {
 
   const degree = {};
   const bump = (id, n = 1) => { degree[id] = (degree[id] || 0) + n; };
+
+  const born = (iso) => (iso ? Date.parse(iso) || 0 : 0);
+  const personBorn = Object.fromEntries(state.people.map((p) => [p.id, born(p.createdAt)]));
 
   const pairSeen = new Set();
   const edges = [];
@@ -32,13 +46,16 @@ async function renderConstellation() {
       continue;
     }
     pairSeen.add(key);
-    edges.push({ a: c.from, b: c.to, kind: 'conn', mutual: false });
+    edges.push({ a: c.from, b: c.to, kind: 'conn', mutual: false, bornAt: born(c.at) });
   }
   for (const pr of state.projects) {
-    for (const m of pr.members) { edges.push({ a: m, b: pr.id, kind: 'member' }); bump(pr.id); }
+    for (const m of pr.members) {
+      edges.push({ a: m, b: pr.id, kind: 'member', bornAt: Math.max(born(pr.createdAt), personBorn[m] || 0) });
+      bump(pr.id);
+    }
   }
   for (const t of state.tries) {
-    edges.push({ a: t.from, b: t.to, kind: 'try' });
+    edges.push({ a: t.from, b: t.to, kind: 'try', bornAt: born(t.at) });
     bump(t.to);
   }
 
@@ -46,7 +63,7 @@ async function renderConstellation() {
   for (const p of state.people) {
     nodes.push({
       id: p.id, type: 'person', label: p.name, color: CV_COLORS[p.profileType] || CV_COLORS.Both,
-      r: 13 + 2.5 * Math.sqrt(degree[p.id] || 0), data: p,
+      r: 13 + 2.5 * Math.sqrt(degree[p.id] || 0), data: p, bornAt: born(p.createdAt),
     });
     if (p.photoUrl && !CV.images[p.id]) {
       const img = new Image();
@@ -57,7 +74,7 @@ async function renderConstellation() {
   for (const pr of state.projects) {
     nodes.push({
       id: pr.id, type: 'project', label: pr.name, color: CV_COLORS.project,
-      r: 12 + 2.5 * Math.sqrt(degree[pr.id] || 0), data: pr,
+      r: 12 + 2.5 * Math.sqrt(degree[pr.id] || 0), data: pr, bornAt: born(pr.createdAt),
     });
     if (pr.iconUrl && !CV.images[pr.id]) {
       const img = new Image();
@@ -109,14 +126,30 @@ function stopConstellation() {
 function tickConstellation() {
   const active = !document.getElementById('view-constellation').classList.contains('hidden');
   if (!active) { stopConstellation(); return; }
+  CV.simTime = cvSimTime();
+  if (CV.replay && performance.now() - CV.replay.begun > CV.replay.dur + 1500) {
+    CV.replay = null; // hold the finished frame briefly, then back to live
+    document.getElementById('cv-replay').textContent = '⏪ Timelapse';
+  }
   stepPhysics();
   drawConstellation();
   CV.t += 1;
   CV.raf = requestAnimationFrame(tickConstellation);
 }
 
+function startTimelapse() {
+  const times = [...CV.nodes.map((n) => n.bornAt), ...CV.edges.map((e) => e.bornAt)].filter((t) => t > 0);
+  if (times.length < 2) return;
+  const min = Math.min(...times), max = Math.max(...times);
+  if (max - min < 1000) return; // everything appeared at once — nothing to replay
+  CV.replay = { min: min - (max - min) * 0.02, max, begun: performance.now(), dur: 12000 };
+  CV.selected = null;
+  showConstellationTip(null);
+  document.getElementById('cv-replay').textContent = '⏹ Stop';
+}
+
 function stepPhysics() {
-  const nodes = CV.nodes;
+  const nodes = CV.nodes.filter(cvNodeVisible);
   const REST = { member: 85, conn: 150, try: 170 };
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
@@ -201,6 +234,7 @@ function drawConstellation() {
   // nodes
   const showLabels = CV.nodes.length <= 45;
   for (const n of CV.nodes) {
+    if (!cvNodeVisible(n)) continue;
     const dim = dimmed(n.id);
     ctx.globalAlpha = dim ? 0.18 : 1;
 
@@ -270,11 +304,27 @@ function drawConstellation() {
     }
     ctx.globalAlpha = 1;
   }
+
+  // timelapse progress bar + clock
+  if (CV.replay) {
+    const p = Math.min(1, (performance.now() - CV.replay.begun) / CV.replay.dur);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(16, CV.h - 22, CV.w - 32, 4);
+    ctx.fillStyle = '#3987e5';
+    ctx.fillRect(16, CV.h - 22, (CV.w - 32) * p, 4);
+    ctx.fillStyle = '#c3c2b7';
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    const when = new Date(CV.simTime);
+    ctx.fillText(`⏪ ${when.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}`, 16, CV.h - 30);
+  }
 }
 
 function nodeAt(x, y) {
   for (let i = CV.nodes.length - 1; i >= 0; i--) {
     const n = CV.nodes[i];
+    if (!cvNodeVisible(n)) continue;
     if (Math.hypot(n.x - x, n.y - y) <= n.r + 4) return n;
   }
   return null;
@@ -289,6 +339,15 @@ function bindConstellationEvents() {
       CV.filters[kind] = !CV.filters[kind];
       btn.classList.toggle('off', !CV.filters[kind]);
     }));
+
+  document.getElementById('cv-replay').addEventListener('click', () => {
+    if (CV.replay) {
+      CV.replay = null;
+      document.getElementById('cv-replay').textContent = '⏪ Timelapse';
+    } else {
+      startTimelapse();
+    }
+  });
 
   const canvas = CV.canvas;
   const pos = (ev) => {
