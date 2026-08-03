@@ -450,8 +450,8 @@ function personCardHtml(p) {
       </div>
       ${p.profileType ? `<span class="badge type-${esc(p.profileType)}">${esc(p.profileType)}</span>` : ''}
     </div>
-    ${projHtml}
     ${p.lookingFor ? `<div class="looking-for"><b>Looking for</b>${esc(p.lookingFor)}</div>` : ''}
+    ${projHtml}
     ${qaHtml('person', p.id)}
     <div class="card-foot">
       <div class="contact-icons">${contacts}</div>
