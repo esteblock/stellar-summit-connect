@@ -8,7 +8,10 @@ const CV = {
   canvas: null, ctx: null, raf: null, w: 0, h: 0, dpr: 1,
   hover: null, dragging: null, selected: null,
   images: {}, bgStars: [], posCache: {}, t: 0,
+  filters: { conn: true, try: true, member: true }, // which edge kinds are visible
 };
+
+const cvVisibleEdges = () => CV.edges.filter((e) => CV.filters[e.kind]);
 
 const CV_COLORS = { Technical: '#3987e5', Business: '#d95926', Both: '#199e70', project: '#c98500' };
 
@@ -128,7 +131,7 @@ function stepPhysics() {
       b.vx += f * dx; b.vy += f * dy;
     }
   }
-  for (const e of CV.edges) {
+  for (const e of cvVisibleEdges()) {
     const a = CV.byId[e.a], b = CV.byId[e.b];
     const dx = b.x - a.x, dy = b.y - a.y;
     const d = Math.max(1, Math.hypot(dx, dy));
@@ -164,7 +167,7 @@ function drawConstellation() {
   const related = new Set();
   if (focus) {
     related.add(focus.id);
-    for (const e of CV.edges) {
+    for (const e of cvVisibleEdges()) {
       if (e.a === focus.id) related.add(e.b);
       if (e.b === focus.id) related.add(e.a);
     }
@@ -172,7 +175,7 @@ function drawConstellation() {
   const dimmed = (id) => focus && !related.has(id);
 
   // edges
-  for (const e of CV.edges) {
+  for (const e of cvVisibleEdges()) {
     const a = CV.byId[e.a], b = CV.byId[e.b];
     const dim = focus && !(related.has(a.id) && related.has(b.id) && (e.a === focus.id || e.b === focus.id || !focus));
     const isFocusEdge = focus && (e.a === focus.id || e.b === focus.id);
@@ -279,6 +282,14 @@ function nodeAt(x, y) {
 
 function bindConstellationEvents() {
   CV._bound = true;
+
+  document.querySelectorAll('.edge-toggle').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.edge;
+      CV.filters[kind] = !CV.filters[kind];
+      btn.classList.toggle('off', !CV.filters[kind]);
+    }));
+
   const canvas = CV.canvas;
   const pos = (ev) => {
     const rect = canvas.getBoundingClientRect();

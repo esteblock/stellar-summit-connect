@@ -85,10 +85,10 @@
       <div class="legend-item"><span class="legend-swatch" style="background:#d95926;border-radius:50%"></span>Business</div>
       <div class="legend-item"><span class="legend-swatch" style="background:#199e70;border-radius:50%"></span>Both</div>
       <div class="legend-item"><span class="legend-swatch cv-diamond"></span>Project</div>
-      <div class="legend-item"><span class="legend-line" style="background:#3987e5"></span>connected</div>
-      <div class="legend-item"><span class="legend-line legend-dashed"></span>tried it</div>
-      <div class="legend-item"><span class="legend-line" style="background:rgba(255,255,255,.25)"></span>team</div>
-      <span class="count-line">drag the stars · click for details</span>
+      <button class="legend-item edge-toggle" data-edge="conn" title="Show/hide connections"><span class="legend-line" style="background:#3987e5"></span>connected</button>
+      <button class="legend-item edge-toggle" data-edge="try" title="Show/hide tried-it"><span class="legend-line legend-dashed"></span>tried it</button>
+      <button class="legend-item edge-toggle" data-edge="member" title="Show/hide teams"><span class="legend-line" style="background:rgba(255,255,255,.25)"></span>team</button>
+      <span class="count-line">drag the stars · click for details · tap a line type to hide it</span>
     </div>
     <div id="constellation-wrap">
       <canvas id="constellation"></canvas>

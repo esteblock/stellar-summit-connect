@@ -442,7 +442,7 @@ function personCardHtml(p) {
       ${tryRowHtml(pr)}
     </div>`).join('');
 
-  return `<article class="card">
+  return `<article class="card" data-bid="${esc(p.id)}">
     <div class="card-head">
       ${avatarHtml(p)}
       <div class="card-head-info">
@@ -504,7 +504,7 @@ function projectCardHtml(pr, rank = 99) {
          onerror="this.outerHTML='<div class=&quot;proj-patch&quot;><span>${esc(initials(pr.name))}</span></div>'" />`
     : `<div class="proj-patch"><span>${esc(initials(pr.name))}</span></div>`;
 
-  return `<article class="card project-card holo" style="--h1:${h1};--h2:${h2}">
+  return `<article class="card project-card holo" data-pid="${esc(pr.id)}" style="--h1:${h1};--h2:${h2}">
     <div class="holo-glare"></div>
     <div class="proj-banner-wrap">
       ${banner}
@@ -620,7 +620,8 @@ function renderMap() {
       addMarker(pos,
         `<strong>${esc(p.name)}</strong><br>${esc(pos.label)}` +
         (projs ? `<br>🛠 ${esc(projs)}` : '') +
-        (p.telegram ? `<br><a href="${esc(handleUrl('telegram', p.telegram))}" target="_blank">✈ ${esc(p.telegram)}</a>` : ''),
+        (p.telegram ? `<br><a href="${esc(handleUrl('telegram', p.telegram))}" target="_blank">✈ ${esc(p.telegram)}</a>` : '') +
+        `<br><a href="#builders" data-openbuilder="${esc(p.id)}">Open builder →</a>`,
         { imgUrl: p.photoUrl, fallbackText: initials(p.name), fallbackBg: avatarColor(p.name), shape: 'pin-person' });
       located++;
     }
@@ -642,7 +643,8 @@ function renderMap() {
         `<strong>${esc(pr.name)}</strong>` +
         (pr.oneLiner ? `<br>${esc(pr.oneLiner)}` : '') +
         `<br>👥 ${esc(names)}` +
-        ((pr.links || []).length ? `<br><a href="${esc(normalizeLink(pr.links[0]))}" target="_blank">${esc(pr.links[0])}</a>` : ''),
+        ((pr.links || []).length ? `<br><a href="${esc(normalizeLink(pr.links[0]))}" target="_blank">${esc(pr.links[0])}</a>` : '') +
+        `<br><a href="#projects" data-openproj="${esc(pr.id)}">Open project →</a>`,
         { imgUrl: pr.iconUrl, fallbackText: initials(pr.name), fallbackBg: h1, shape: 'pin-project' }));
       located++;
     }
@@ -682,6 +684,46 @@ async function markTried(projectId) {
   } catch (e) {
     toast(e.message);
   }
+}
+
+// jump from anywhere (map popups, etc.) to a card in Projects or Builders
+document.addEventListener('click', (e) => {
+  const proj = e.target.closest('[data-openproj]');
+  const person = e.target.closest('[data-openbuilder]');
+  if (!proj && !person) return;
+  e.preventDefault();
+  if (proj) openProjectCard(proj.dataset.openproj);
+  else openBuilderCard(person.dataset.openbuilder);
+});
+
+function seekCard(selector) {
+  let tries = 0;
+  const seek = setInterval(() => {
+    const card = document.querySelector(selector);
+    if (card) {
+      clearInterval(seek);
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.classList.add('flash');
+      setTimeout(() => card.classList.remove('flash'), 2000);
+    } else if (++tries > 12) clearInterval(seek);
+  }, 150);
+}
+
+function openProjectCard(projectId) {
+  $('#psearch').value = '';
+  $('#pfilter-category').value = '';
+  $('#pfilter-stage').value = '';
+  show('projects');
+  seekCard(`#project-cards [data-pid="${CSS.escape(projectId)}"]`);
+}
+
+function openBuilderCard(personId) {
+  $('#search').value = '';
+  $('#filter-category').value = '';
+  $('#filter-type').value = '';
+  $('#filter-country').value = '';
+  show('builders');
+  seekCard(`#cards [data-bid="${CSS.escape(personId)}"]`);
 }
 
 function editProject(projectId) {
