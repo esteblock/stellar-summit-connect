@@ -26,6 +26,7 @@
     <button class="tab active" data-view="builders" data-icon="👥">Builders</button>
     <button class="tab" data-view="projects" data-icon="🃏">Projects</button>
     <button class="tab" data-view="constellation" data-icon="✦">Constellation ✦</button>
+    <button class="tab" data-view="ai" data-icon="✨">AI Match</button>
     <button class="tab" data-view="map" data-icon="🗺️">Map</button>
     <button class="tab" data-view="join" data-icon="➕">Join</button>
     <button class="tab" data-view="metrics" data-icon="📊">Metrics</button>
@@ -85,6 +86,17 @@
       <canvas id="constellation"></canvas>
       <div id="cv-tip" class="cv-tip hidden"></div>
     </div>
+  </section>
+
+  <!-- ============ AI MATCH ============ -->
+  <section id="view-ai" class="view hidden">
+    <div class="panel ai-intro">
+      <h2>Who should you meet? ✨</h2>
+      <p class="form-hint">The AI reads your profile and projects — what you're building, who your customer is, what you're looking for — and compares it against everyone else at the summit to pick the people worth walking up to, with a reason and an icebreaker for each.</p>
+      <button id="ai-run" class="btn primary big">Find my matches ✨</button>
+      <p id="ai-status" class="form-status"></p>
+    </div>
+    <div id="ai-results" class="cards"></div>
   </section>
 
   <!-- ============ MAP ============ -->

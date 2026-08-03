@@ -505,6 +505,8 @@ function projectCardHtml(pr, rank = 99) {
     </div>
     <div class="card-name proj-title">${pr.iconUrl ? `<img class="proj-mini-icon" src="${esc(pr.iconUrl)}" alt="" />` : ''}${esc(pr.name)}</div>
     ${pr.oneLiner ? `<div class="card-oneliner">${esc(pr.oneLiner)}</div>` : ''}
+    ${pr.customer ? `<div class="card-oneliner">🎯 <strong>Customer:</strong> ${esc(pr.customer)}</div>` : ''}
+    ${pr.lookingFor ? `<div class="looking-for"><b>Project looking for</b>${esc(pr.lookingFor)}</div>` : ''}
     ${(pr.categories || []).length ? `<div class="badges">${pr.categories.map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}</div>` : ''}
     <div class="crew">
       <div class="crew-stack">${team.map((m) => avatarHtml(m, 'avatar avatar-xs')).join('')}</div>
@@ -844,6 +846,8 @@ function projectBlockEl(data = {}) {
       <div class="grid-2">
         <label>Project name *<input class="pb-name" maxlength="160" value="${esc(data.name || '')}" placeholder="My cool dApp" /></label>
         <label>One-liner<input class="pb-oneliner" maxlength="280" value="${esc(data.oneLiner || '')}" placeholder="What does it do?" /></label>
+        <label>Who is your customer?<input class="pb-customer" maxlength="200" value="${esc(data.customer || '')}" placeholder="Neobanks in LatAm, DeFi degens…" /></label>
+        <label>What is this project looking for?<input class="pb-lookingfor" maxlength="500" value="${esc(data.lookingFor || '')}" placeholder="Pilot users, integrations, an anchor…" /></label>
       </div>
       <span class="mini-label">Categories (pick any)</span>
       <div class="pb-cats">${CATEGORIES.map((c) =>
@@ -977,6 +981,8 @@ form.addEventListener('submit', async (e) => {
       const proj = {
         name: el.querySelector('.pb-name').value.trim(),
         oneLiner: el.querySelector('.pb-oneliner').value.trim(),
+        customer: el.querySelector('.pb-customer').value.trim(),
+        lookingFor: el.querySelector('.pb-lookingfor').value.trim(),
         categories: [...el.querySelectorAll('.pb-cats input:checked')].map((i) => i.value),
         links: [...el.querySelectorAll('.pb-link')].map((i) => i.value.trim()).filter(Boolean),
       };
@@ -1111,6 +1117,79 @@ async function loadMetrics() {
     : '<li class="count-line">Connections will show up here.</li>';
 }
 
+/* ---------- AI matchmaking ---------- */
+
+const AI_LOADING_LINES = [
+  'Reading everyone\'s projects…',
+  'Cross-matching who\'s looking for what…',
+  'Checking customer overlap…',
+  'Drawing your corner of the constellation…',
+  'Writing your icebreakers…',
+];
+
+$('#ai-run').addEventListener('click', async () => {
+  if (!requireProfile()) return;
+  const btn = $('#ai-run');
+  const status = $('#ai-status');
+  btn.disabled = true;
+  status.className = 'form-status';
+  let i = 0;
+  status.textContent = AI_LOADING_LINES[0];
+  const ticker = setInterval(() => { status.textContent = AI_LOADING_LINES[++i % AI_LOADING_LINES.length]; }, 2200);
+  try {
+    const result = await api('/api/match', { body: {} });
+    status.textContent = result.cached ? 'Your matches (refreshes every 10 min):' : 'Your matches:';
+    renderAiMatches(result.matches);
+  } catch (e) {
+    status.classList.add('err');
+    status.textContent = e.message;
+  } finally {
+    clearInterval(ticker);
+    btn.disabled = false;
+    btn.textContent = 'Refresh my matches ✨';
+  }
+});
+
+function renderAiMatches(matches) {
+  const wrap = $('#ai-results');
+  if (!matches.length) {
+    wrap.innerHTML = '<p class="count-line">No matches yet — as more builders join, better matches appear.</p>';
+    return;
+  }
+  wrap.innerHTML = matches.map((m, i) => {
+    const p = state.people.find((x) => x.id === m.personId);
+    if (!p) return '';
+    const projs = projectsOf(p.id).map((pr) => pr.name).join(', ');
+    const contacts = [
+      p.telegram && `<a href="${esc(handleUrl('telegram', p.telegram))}" target="_blank" rel="noopener">✈ ${esc(p.telegram)}</a>`,
+      p.x && `<a href="${esc(handleUrl('x', p.x))}" target="_blank" rel="noopener">𝕏 ${esc(p.x)}</a>`,
+      p.linkedin && `<a href="${esc(handleUrl('linkedin', p.linkedin))}" target="_blank" rel="noopener">in</a>`,
+      p.email && `<a href="mailto:${esc(p.email)}">✉</a>`,
+    ].filter(Boolean).join('');
+    const connected = state.myConnections.has(p.id);
+    return `<article class="card ai-match">
+      <div class="ai-rank">#${i + 1}</div>
+      <div class="card-head">
+        ${avatarHtml(p)}
+        <div class="card-head-info">
+          <div class="card-name">${esc(p.name)}</div>
+          ${p.role ? `<div class="card-role">${esc(p.role)}</div>` : ''}
+          ${projs ? `<div class="card-place">🛠 ${esc(projs)}</div>` : ''}
+        </div>
+      </div>
+      <div class="ai-reason">${esc(m.reason)}</div>
+      ${m.icebreaker ? `<blockquote class="ai-icebreaker">💬 “${esc(m.icebreaker)}”</blockquote>` : ''}
+      <div class="card-foot">
+        <div class="contact-icons">${contacts}</div>
+        ${connected
+          ? '<button class="btn small connected" disabled>Connected ✓</button>'
+          : `<button class="btn small primary" data-connect="${esc(p.id)}">Connect ✦</button>`}
+      </div>
+    </article>`;
+  }).join('');
+  bindCardActions('#ai-results');
+}
+
 /* ---------- export ---------- */
 
 async function download(path, filename) {
@@ -1131,7 +1210,7 @@ $('#export-csv').addEventListener('click', () =>
 
 /* ---------- boot ---------- */
 
-const initialView = ['builders', 'projects', 'constellation', 'map', 'join', 'metrics'].includes(location.hash.slice(1))
+const initialView = ['builders', 'projects', 'constellation', 'ai', 'map', 'join', 'metrics'].includes(location.hash.slice(1))
   ? location.hash.slice(1) : 'builders';
 loadData()
   .then(async () => {

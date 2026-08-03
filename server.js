@@ -100,7 +100,7 @@ const PERSON_FIELDS = {
   name: 120, role: 120, profileType: 20, country: 80, city: 80,
   x: 80, telegram: 80, linkedin: 160, lookingFor: 1200,
 };
-const PROJECT_FIELDS = { name: 160, oneLiner: 280 };
+const PROJECT_FIELDS = { name: 160, oneLiner: 280, customer: 200, lookingFor: 500 };
 
 function cleanText(body, fields) {
   const out = {};
@@ -170,6 +170,25 @@ function savePhoto(id, dataUrl) {
 function publicPerson(p) {
   const { token, ...rest } = p;
   return rest;
+}
+
+// ---------- AI matchmaking helpers ----------
+
+const matchCache = new Map(); // personId → {at, data}
+const MATCH_TTL_MS = 10 * 60 * 1000;
+
+function matchBlurb(p) {
+  const projects = state.projects
+    .filter((pr) => pr.members.includes(p.id))
+    .map((pr) => ({
+      name: pr.name, oneLiner: pr.oneLiner, categories: pr.categories,
+      customer: pr.customer, lookingFor: pr.lookingFor,
+    }));
+  return {
+    id: p.id, name: p.name, role: p.role, profile: p.profileType,
+    location: [p.city, p.country].filter(Boolean).join(', '),
+    lookingFor: p.lookingFor, projects,
+  };
 }
 
 // ---------- stats ----------
@@ -546,6 +565,69 @@ const server = http.createServer(async (req, res) => {
 
     if (route === 'GET /api/stats') {
       return sendJson(res, 200, computeStats());
+    }
+
+    // ---------- AI matchmaking (OpenRouter, cheap model) ----------
+
+    if (route === 'POST /api/match') {
+      const person = sessionPerson(req);
+      if (!person) return sendJson(res, 401, { error: 'sign in and create your profile first' });
+      const apiKey = process.env.OPENROUTER_API_KEY;
+      if (!apiKey) return sendJson(res, 503, { error: 'AI matching is not configured on this server' });
+
+      const cached = matchCache.get(person.id);
+      if (cached && Date.now() - cached.at < MATCH_TTL_MS) {
+        return sendJson(res, 200, { ...cached.data, cached: true });
+      }
+      const others = state.people.filter((p) => p.id !== person.id);
+      if (others.length < 2) return sendJson(res, 400, { error: 'not enough builders on the board yet' });
+
+      const model = process.env.AI_MODEL || 'google/gemini-2.5-flash';
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          temperature: 0.4,
+          max_tokens: 2500,
+          response_format: { type: 'json_object' },
+          messages: [
+            {
+              role: 'system',
+              content: 'You are the matchmaking engine of Stellar Summit São Paulo, an event for builders on the Stellar blockchain. ' +
+                'Given ME (a builder) and OTHERS (everyone else at the event, with their projects), pick the 3-5 people I should meet, best first. ' +
+                'Match on complementarity: what I/my projects are LOOKING FOR vs what they/their projects offer, customer overlap, category synergy, technical<->business pairing, same city/country for follow-ups. ' +
+                'Answer ONLY with JSON: {"matches":[{"personId":"<their id>","name":"<their name>","reason":"<2-3 concrete sentences citing both sides — why THIS person, mentioning their project and mine>","icebreaker":"<one specific, casual opening line I can literally say to them at the event>"}]} ' +
+                'Reasons must be specific (never generic networking advice). Write reason and icebreaker in the same language ME writes in (Spanish/Portuguese/English).',
+            },
+            { role: 'user', content: `ME:\n${JSON.stringify(matchBlurb(person))}\n\nOTHERS:\n${JSON.stringify(others.map(matchBlurb))}` },
+          ],
+        }),
+      });
+      if (!r.ok) {
+        console.error('OpenRouter error', r.status, await r.text().catch(() => ''));
+        return sendJson(res, 502, { error: 'the AI is unavailable right now, try again in a minute' });
+      }
+      const data = await r.json();
+      const text = data.choices?.[0]?.message?.content || '';
+      let parsed;
+      try {
+        parsed = JSON.parse(text.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim());
+      } catch {
+        console.error('OpenRouter unparseable output:', text.slice(0, 300));
+        return sendJson(res, 502, { error: 'the AI returned something unreadable, try again' });
+      }
+      const matches = (Array.isArray(parsed.matches) ? parsed.matches : [])
+        .filter((m) => m && state.people.some((p) => p.id === m.personId) && m.personId !== person.id)
+        .slice(0, 5)
+        .map((m) => ({
+          personId: String(m.personId),
+          reason: String(m.reason || '').slice(0, 600),
+          icebreaker: String(m.icebreaker || '').slice(0, 300),
+        }));
+      const result = { matches, generatedAt: new Date().toISOString(), model };
+      matchCache.set(person.id, { at: Date.now(), data: result });
+      return sendJson(res, 200, result);
     }
 
     if (route === 'GET /api/export') {

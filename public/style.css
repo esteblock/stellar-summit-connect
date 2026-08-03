@@ -461,6 +461,23 @@ img.avatar { object-fit: cover; }
 .cv-tip-links { display: flex; gap: 12px; }
 .cv-tip-links a { color: #86b6ef; text-decoration: none; }
 
+/* ---------- AI match ---------- */
+
+.ai-intro { max-width: 640px; margin: 18px auto; display: flex; flex-direction: column; gap: 12px; }
+.ai-intro h2 { font-size: 20px; }
+#ai-results { margin-top: 18px; }
+.ai-match { position: relative; }
+.ai-rank {
+  position: absolute; top: 12px; right: 14px;
+  font-family: 'Unbounded', system-ui, sans-serif; font-size: 15px; color: var(--ink-muted);
+}
+.ai-reason { font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+.ai-icebreaker {
+  margin: 0; padding: 9px 12px; border-left: 3px solid var(--series-1);
+  background: rgba(57, 135, 229, 0.08); border-radius: 6px;
+  font-size: 13.5px; color: var(--ink); font-style: italic;
+}
+
 /* ---------- gate & export ---------- */
 
 .landing {
