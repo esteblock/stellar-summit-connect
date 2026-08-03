@@ -8,7 +8,7 @@ const CV = {
   canvas: null, ctx: null, raf: null, w: 0, h: 0, dpr: 1,
   hover: null, dragging: null, selected: null,
   images: {}, bgStars: [], posCache: {}, t: 0,
-  filters: { conn: true, try: true, member: true }, // which edge kinds are visible
+  filters: { conn: false, try: false, member: true }, // which edge kinds are visible
   replay: null, // {min, max, begun, dur} while the timelapse is playing
   simTime: Infinity,
 };
@@ -224,8 +224,8 @@ function drawConstellation() {
       ctx.strokeStyle = `rgba(217,89,38,${0.5 * alpha})`;
       ctx.lineWidth = 1.2;
     } else {
-      ctx.strokeStyle = `rgba(255,255,255,${0.16 * alpha})`;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(255,255,255,${0.7 * alpha})`;
+      ctx.lineWidth = 2;
     }
     ctx.stroke();
     ctx.setLineDash([]);
