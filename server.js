@@ -400,6 +400,8 @@ const server = http.createServer(async (req, res) => {
       project.createdAt = new Date().toISOString();
       const imageUrl = savePhoto(`proj-${project.id}`, body.image);
       if (imageUrl) project.imageUrl = imageUrl;
+      const iconUrl = savePhoto(`icon-${project.id}`, body.icon);
+      if (iconUrl) project.iconUrl = iconUrl;
       state.projects.push(project);
       persist();
       return sendJson(res, 201, { project });
@@ -431,6 +433,8 @@ const server = http.createServer(async (req, res) => {
         Object.assign(project, updates);
         const imageUrl = savePhoto(`proj-${project.id}`, body.image);
         if (imageUrl) project.imageUrl = imageUrl;
+        const iconUrl = savePhoto(`icon-${project.id}`, body.icon);
+        if (iconUrl) project.iconUrl = iconUrl;
         persist();
         return sendJson(res, 200, { project });
       }

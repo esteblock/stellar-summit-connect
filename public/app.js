@@ -17,6 +17,22 @@ const CATEGORIES = [
 
 const AVATAR_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9'];
 
+// foil gradient pair per category — the holo-card signature is keyed to what the project IS
+const CATEGORY_HUES = {
+  'DeFi': ['#3987e5', '#9085e9'],
+  'Payments & Remittances': ['#199e70', '#3987e5'],
+  'RWA & Tokenization': ['#c98500', '#d95926'],
+  'Wallets & On/Off-ramps': ['#3987e5', '#199e70'],
+  'Infrastructure & Dev Tools': ['#9085e9', '#3987e5'],
+  'AI x Web3': ['#d55181', '#9085e9'],
+  'NFTs & Gaming': ['#d55181', '#c98500'],
+  'Social & Community': ['#d95926', '#d55181'],
+  'Security & Auditing': ['#e66767', '#c98500'],
+  'Financial Inclusion & Impact': ['#199e70', '#c98500'],
+  'Education': ['#3987e5', '#d55181'],
+  'Other': ['#898781', '#c3c2b7'],
+};
+
 const state = {
   people: [],
   projects: [],
@@ -139,7 +155,56 @@ function requireProfile() {
 
 function showGate() {
   $('#gate').classList.remove('hidden');
+  startLandingCanvas();
   $('#gate-input').focus();
+}
+
+/* landing hero: a drifting particle constellation — the product, as decoration */
+let landingRaf = null;
+function startLandingCanvas() {
+  const canvas = $('#landing-canvas');
+  if (!canvas || landingRaf) return;
+  const ctx = canvas.getContext('2d');
+  const dots = Array.from({ length: 42 }, () => ({
+    x: Math.random(), y: Math.random(),
+    vx: (Math.random() - 0.5) * 0.0006, vy: (Math.random() - 0.5) * 0.0006,
+    tw: Math.random() * 6.28,
+  }));
+  let t = 0;
+  const step = () => {
+    if ($('#gate').classList.contains('hidden')) { landingRaf = null; return; }
+    const w = canvas.width = canvas.offsetWidth;
+    const h = canvas.height = canvas.offsetHeight;
+    ctx.clearRect(0, 0, w, h);
+    t++;
+    for (const d of dots) {
+      d.x = (d.x + d.vx + 1) % 1;
+      d.y = (d.y + d.vy + 1) % 1;
+    }
+    for (let i = 0; i < dots.length; i++) {
+      for (let j = i + 1; j < dots.length; j++) {
+        const dx = (dots[i].x - dots[j].x) * w, dy = (dots[i].y - dots[j].y) * h;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 130) {
+          ctx.strokeStyle = `rgba(57,135,229,${(0.22 * (1 - dist / 130)).toFixed(3)})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(dots[i].x * w, dots[i].y * h);
+          ctx.lineTo(dots[j].x * w, dots[j].y * h);
+          ctx.stroke();
+        }
+      }
+    }
+    for (const d of dots) {
+      const a = 0.45 + 0.35 * Math.sin(t / 50 + d.tw);
+      ctx.fillStyle = `rgba(255,255,255,${a.toFixed(2)})`;
+      ctx.beginPath();
+      ctx.arc(d.x * w, d.y * h, 1.4, 0, 6.29);
+      ctx.fill();
+    }
+    landingRaf = requestAnimationFrame(step);
+  };
+  landingRaf = requestAnimationFrame(step);
 }
 
 $('#gate-form').addEventListener('submit', async (e) => {
@@ -226,12 +291,22 @@ function qaHtml(targetType, targetId) {
   }).join('');
 
   const isSelf = state.me && targetType === 'person' && targetId === state.me.id;
-  return `<div class="qa">
+  const key = `${targetType}:${targetId}`;
+  return `<details class="qa" data-qa="${esc(key)}"${qaOpen.has(key) ? ' open' : ''}>
+    <summary>💬 Q&amp;A${qs.length ? ` · ${qs.length}` : ''}</summary>
     ${qs.length > 3 ? `<div class="qa-by">${qs.length - 3} earlier question${qs.length - 3 === 1 ? '' : 's'} hidden</div>` : ''}
     ${items}
-    ${!isSelf ? `<button class="btn ghost small qa-btn" data-qask="${esc(targetType)}:${esc(targetId)}">💬 Ask ${targetType === 'project' ? 'the team' : 'them'} a question</button>` : ''}
-  </div>`;
+    ${!isSelf ? `<button class="btn ghost small qa-btn" data-qask="${esc(key)}">Ask ${targetType === 'project' ? 'the team' : 'them'} a question</button>` : ''}
+  </details>`;
 }
+
+// keep Q&A sections open across the periodic re-renders
+const qaOpen = new Set();
+document.addEventListener('toggle', (e) => {
+  const key = e.target.dataset?.qa;
+  if (!key) return;
+  if (e.target.open) qaOpen.add(key); else qaOpen.delete(key);
+}, true);
 
 function bindCardActions(rootSel) {
   document.querySelectorAll(`${rootSel} [data-connect]`).forEach((btn) =>
@@ -379,6 +454,8 @@ function personCardHtml(p) {
 
 /* ---------- projects view ---------- */
 
+const triesOf = (projectId) => state.tries.filter((t) => t.to === projectId).length;
+
 function renderProjectCards() {
   const q = $('#psearch').value.trim().toLowerCase();
   const cat = $('#pfilter-category').value;
@@ -391,32 +468,72 @@ function renderProjectCards() {
     }
     return true;
   });
+  // leaderboard order: most tried first, then newest — the ranking is real data
+  visible.sort((a, b) => triesOf(b.id) - triesOf(a.id) || (b.createdAt || '').localeCompare(a.createdAt || ''));
   $('#projects-count').textContent =
-    `${visible.length} project${visible.length === 1 ? '' : 's'}` +
+    `${visible.length} project${visible.length === 1 ? '' : 's'} · most tried first` +
     (visible.length !== state.projects.length ? ` (of ${state.projects.length})` : '');
   $('#projects-empty').classList.toggle('hidden', state.projects.length > 0);
-  $('#project-cards').innerHTML = visible.map(projectCardHtml).join('');
+  $('#project-cards').innerHTML = visible.map((pr, i) => projectCardHtml(pr, i)).join('');
   bindCardActions('#project-cards');
+  bindHoloCards();
 }
 
-function projectCardHtml(pr) {
+function projectCardHtml(pr, rank = 99) {
+  const [h1, h2] = CATEGORY_HUES[(pr.categories || [])[0]] || CATEGORY_HUES.Other;
   const img = projectImage(pr);
   const team = membersOf(pr);
+  const tries = triesOf(pr.id);
+  const questions = state.questions.filter((x) => x.targetType === 'project' && x.targetId === pr.id).length;
   const countries = [...new Set(team.map((m) => m.country).filter(Boolean))].join(' · ');
-  return `<article class="card project-card">
-    ${img ? `<img class="proj-banner" src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()" />` : ''}
-    <div class="card-name">${esc(pr.name)}</div>
+
+  const banner = img
+    ? `<img class="proj-banner" src="${esc(img)}" alt="" loading="lazy"
+         onerror="this.outerHTML='<div class=&quot;proj-patch&quot;><span>${esc(initials(pr.name))}</span></div>'" />`
+    : `<div class="proj-patch"><span>${esc(initials(pr.name))}</span></div>`;
+
+  return `<article class="card project-card holo" style="--h1:${h1};--h2:${h2}">
+    <div class="holo-glare"></div>
+    <div class="proj-banner-wrap">
+      ${banner}
+      ${rank === 0 && tries > 0 ? '<div class="hot-badge">🔥 Most tried</div>' : ''}
+    </div>
+    <div class="card-name proj-title">${pr.iconUrl ? `<img class="proj-mini-icon" src="${esc(pr.iconUrl)}" alt="" />` : ''}${esc(pr.name)}</div>
     ${pr.oneLiner ? `<div class="card-oneliner">${esc(pr.oneLiner)}</div>` : ''}
     ${(pr.categories || []).length ? `<div class="badges">${pr.categories.map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}</div>` : ''}
-    ${(pr.links || []).length ? `<div class="card-links">${pr.links.map((l) =>
-      `<a href="${esc(normalizeLink(l))}" target="_blank" rel="noopener">${esc(l.replace(/^https?:\/\//, ''))}</a>`).join('')}</div>` : ''}
-    <div class="proj-members">
-      ${team.map((m) => `<span class="member-chip" title="${esc(m.role || '')}">${avatarHtml(m, 'avatar avatar-xs')} ${esc(m.name)}</span>`).join('')}
+    <div class="crew">
+      <div class="crew-stack">${team.map((m) => avatarHtml(m, 'avatar avatar-xs')).join('')}</div>
+      <span class="crew-names">${esc(team.map((m) => m.name.split(' ')[0]).join(', '))}</span>
       ${countries ? `<span class="card-place">📍 ${esc(countries)}</span>` : ''}
+    </div>
+    <div class="stat-strip">
+      <span title="times tried">🧪 ${tries}</span>
+      <span title="questions">💬 ${questions}</span>
+      <span title="team size">👥 ${team.length}</span>
+      ${(pr.links || []).length ? pr.links.slice(0, 2).map((l) =>
+        `<a href="${esc(normalizeLink(l))}" target="_blank" rel="noopener">${esc(l.replace(/^https?:\/\//, '').split('/')[0])}</a>`).join('') : ''}
     </div>
     ${tryRowHtml(pr)}
     ${qaHtml('project', pr.id)}
   </article>`;
+}
+
+// pointer-reactive foil tilt — the signature; off for touch and reduced-motion
+function bindHoloCards() {
+  if (window.matchMedia('(pointer: coarse)').matches ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  document.querySelectorAll('.holo').forEach((card) => {
+    card.addEventListener('pointermove', (e) => {
+      const r = card.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width;
+      const py = (e.clientY - r.top) / r.height;
+      card.style.setProperty('--px', px);
+      card.style.setProperty('--py', py);
+      card.style.transform =
+        `perspective(900px) rotateX(${((0.5 - py) * 5).toFixed(2)}deg) rotateY(${((px - 0.5) * 7).toFixed(2)}deg)`;
+    });
+    card.addEventListener('pointerleave', () => { card.style.transform = ''; });
+  });
 }
 
 ['#psearch', '#pfilter-category'].forEach((sel) => $(sel).addEventListener('input', renderProjectCards));
@@ -453,18 +570,24 @@ function renderMap() {
     return c ? { lat: c.lat, lon: c.lon, label: c.label, exact: false } : null;
   };
 
-  // spread markers that share a spot on a small ring so they don't overlap
+  // photo/logo pins; markers sharing a spot spread on a small ring
   const addMarker = (() => {
     const seen = {};
-    return (pos, color, popup) => {
+    return (pos, popup, { imgUrl, fallbackText, fallbackBg, shape }) => {
       const key = `${pos.lat.toFixed(2)},${pos.lon.toFixed(2)}`;
       const i = seen[key] = (seen[key] || 0) + 1;
       const r = pos.exact ? 0.015 : 0.7;
       const dy = i === 1 ? 0 : r * Math.sin(i * 2.4);
       const dx = i === 1 ? 0 : r * 1.3 * Math.cos(i * 2.4);
-      L.circleMarker([pos.lat + dy, pos.lon + dx], {
-        radius: 9, color, weight: 2, fillColor: color, fillOpacity: 0.55,
-      }).bindPopup(popup).addTo(state.mapMarkers);
+      const inner = imgUrl
+        ? `<img src="${esc(imgUrl)}" alt="" />`
+        : `<span style="background:${fallbackBg}">${esc(fallbackText)}</span>`;
+      const icon = L.divIcon({
+        className: 'pin-anchor',
+        html: `<div class="pin ${shape}">${inner}</div>`,
+        iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -20],
+      });
+      L.marker([pos.lat + dy, pos.lon + dx], { icon }).bindPopup(popup).addTo(state.mapMarkers);
     };
   })();
 
@@ -473,10 +596,11 @@ function renderMap() {
       const pos = personPos(p);
       if (!pos) { unlocated.push(p.name); continue; }
       const projs = projectsOf(p.id).map((pr) => pr.name).join(', ');
-      addMarker(pos, '#3987e5',
+      addMarker(pos,
         `<strong>${esc(p.name)}</strong><br>${esc(pos.label)}` +
         (projs ? `<br>🛠 ${esc(projs)}` : '') +
-        (p.telegram ? `<br><a href="${esc(handleUrl('telegram', p.telegram))}" target="_blank">✈ ${esc(p.telegram)}</a>` : ''));
+        (p.telegram ? `<br><a href="${esc(handleUrl('telegram', p.telegram))}" target="_blank">✈ ${esc(p.telegram)}</a>` : ''),
+        { imgUrl: p.photoUrl, fallbackText: initials(p.name), fallbackBg: avatarColor(p.name), shape: 'pin-person' });
       located++;
     }
   } else {
@@ -492,11 +616,13 @@ function renderMap() {
       }
       if (!positions.length) { unlocated.push(pr.name); continue; }
       const names = team.map((m) => m.name).join(', ');
-      positions.forEach((pos) => addMarker(pos, '#d95926',
+      const [h1] = CATEGORY_HUES[(pr.categories || [])[0]] || CATEGORY_HUES.Other;
+      positions.forEach((pos) => addMarker(pos,
         `<strong>${esc(pr.name)}</strong>` +
         (pr.oneLiner ? `<br>${esc(pr.oneLiner)}` : '') +
         `<br>👥 ${esc(names)}` +
-        ((pr.links || []).length ? `<br><a href="${esc(normalizeLink(pr.links[0]))}" target="_blank">${esc(pr.links[0])}</a>` : '')));
+        ((pr.links || []).length ? `<br><a href="${esc(normalizeLink(pr.links[0]))}" target="_blank">${esc(pr.links[0])}</a>` : ''),
+        { imgUrl: pr.iconUrl, fallbackText: initials(pr.name), fallbackBg: h1, shape: 'pin-project' }));
       located++;
     }
   }
@@ -700,8 +826,10 @@ function projectBlockEl(data = {}) {
         `<input class="pb-link" maxlength="300" value="${esc(l)}" placeholder="https://…" />`).join('')}</div>
       <div class="pb-tools">
         <button type="button" class="btn ghost small pb-add-link">+ link</button>
-        <label class="btn ghost small">Project image<input type="file" class="pb-image" accept="image/*" hidden /></label>
-        <span class="mini-label pb-image-note">${data.imageUrl ? 'image uploaded ✓' : 'no image → we screenshot your first link'}</span>
+        <label class="btn ghost small">Logo 1:1<input type="file" class="pb-icon" accept="image/*" hidden /></label>
+        <span class="mini-label pb-icon-note">${data.iconUrl ? 'logo ✓' : 'shown on map & constellation'}</span>
+        <label class="btn ghost small">Banner<input type="file" class="pb-image" accept="image/*" hidden /></label>
+        <span class="mini-label pb-image-note">${data.imageUrl ? 'banner ✓' : 'no banner → we screenshot your first link'}</span>
       </div>`;
   }
 
@@ -717,7 +845,13 @@ function projectBlockEl(data = {}) {
     const file = e.target.files[0];
     if (!file) return;
     el._imageDataUrl = await resizeImage(file, 900);
-    el.querySelector('.pb-image-note').textContent = 'image ready ✓';
+    el.querySelector('.pb-image-note').textContent = 'banner ready ✓';
+  });
+  el.querySelector('.pb-icon')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    el._iconDataUrl = await resizeImage(file, 256, true); // center-cropped square
+    el.querySelector('.pb-icon-note').textContent = 'logo ready ✓';
   });
   return el;
 }
@@ -754,15 +888,23 @@ $('#photo-input').addEventListener('change', async (e) => {
   prev.textContent = '';
 });
 
-function resizeImage(file, maxSide) {
+function resizeImage(file, maxSide, square = false) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
       const canvas = document.createElement('canvas');
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      if (square) {
+        const side = Math.min(img.width, img.height);
+        canvas.width = canvas.height = Math.min(maxSide, side);
+        canvas.getContext('2d').drawImage(img,
+          (img.width - side) / 2, (img.height - side) / 2, side, side,
+          0, 0, canvas.width, canvas.height);
+      } else {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      }
       resolve(canvas.toDataURL('image/jpeg', 0.85));
     };
     img.onerror = reject;
@@ -812,6 +954,7 @@ form.addEventListener('submit', async (e) => {
         links: [...el.querySelectorAll('.pb-link')].map((i) => i.value.trim()).filter(Boolean),
       };
       if (el._imageDataUrl) proj.image = el._imageDataUrl;
+      if (el._iconDataUrl) proj.icon = el._iconDataUrl;
       if (!proj.name) continue; // empty block — ignore
       if (el.dataset.kind === 'edit') {
         keptIds.add(el.dataset.id);

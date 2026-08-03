@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Stellar Summit Connect · São Paulo</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="style.css" />
 </head>
@@ -211,15 +214,56 @@
 
 <div id="toast" class="toast hidden"></div>
 
-<div id="gate" class="gate hidden">
-  <form id="gate-form" class="panel gate-panel">
-    <span class="brand-star" style="font-size:40px">✦</span>
-    <h2>Stellar Summit Connect</h2>
-    <p class="form-hint">Enter the event password to continue — ask the organizers if you don't have it.</p>
-    <input id="gate-input" type="password" placeholder="Event password" autocomplete="off" />
-    <button class="btn primary big">Enter ✦</button>
-    <p id="gate-status" class="form-status err"></p>
-  </form>
+<div id="gate" class="landing hidden">
+  <canvas id="landing-canvas"></canvas>
+  <div class="landing-inner">
+    <header class="landing-hero">
+      <p class="landing-eyebrow">Stellar Summit · São Paulo</p>
+      <h1>Every builder in this room.<br />One constellation ✦</h1>
+      <p class="landing-sub">See who's here and what they're building. Try each other's apps and say
+        what you think. Ask any team anything. Then watch the constellation grow as the room connects.</p>
+      <form id="gate-form" class="gate-inline">
+        <input id="gate-input" type="password" placeholder="Event password" autocomplete="off" />
+        <button class="btn primary">Enter ✦</button>
+      </form>
+      <p id="gate-status" class="form-status err"></p>
+    </header>
+
+    <div class="landing-grid">
+      <div class="landing-tile" style="--h1:#3987e5;--h2:#9085e9">
+        <span class="landing-icon">✦</span>
+        <h3>Constellation</h3>
+        <p>A living star map of the room — every builder a star, every project a diamond, every connection a line.</p>
+      </div>
+      <div class="landing-tile" style="--h1:#d95926;--h2:#d55181">
+        <span class="landing-icon">🚀</span>
+        <h3>Try each other's apps</h3>
+        <p>Every project is one tap away. Try it, mark it tried, leave the team one line of real feedback.</p>
+      </div>
+      <div class="landing-tile" style="--h1:#199e70;--h2:#3987e5">
+        <span class="landing-icon">🗺️</span>
+        <h3>Builder map</h3>
+        <p>Faces and logos on a world map — see who flew in from where, city by city.</p>
+      </div>
+      <div class="landing-tile" style="--h1:#9085e9;--h2:#d55181">
+        <span class="landing-icon">💬</span>
+        <h3>Public Q&amp;A</h3>
+        <p>Ask any person or team anything. Answers are public and stay up for everyone.</p>
+      </div>
+      <div class="landing-tile" style="--h1:#c98500;--h2:#d95926">
+        <span class="landing-icon">🤝</span>
+        <h3>Connect</h3>
+        <p>One tap to connect — X, Telegram, LinkedIn and email, right on the card. Mutuals become matches.</p>
+      </div>
+      <div class="landing-tile" style="--h1:#3987e5;--h2:#199e70">
+        <span class="landing-icon">📊</span>
+        <h3>Live metrics</h3>
+        <p>The room's pulse: connections made, most-tried projects, questions answered — live on the big screen.</p>
+      </div>
+    </div>
+
+    <p class="landing-foot">Created with ❤️ by esteblock from PaltaLabs 🥑 · ask the organizers for the password</p>
+  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

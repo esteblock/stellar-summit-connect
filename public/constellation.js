@@ -56,6 +56,11 @@ async function renderConstellation() {
       id: pr.id, type: 'project', label: pr.name, color: CV_COLORS.project,
       r: 12 + 2.5 * Math.sqrt(degree[pr.id] || 0), data: pr,
     });
+    if (pr.iconUrl && !CV.images[pr.id]) {
+      const img = new Image();
+      img.src = pr.iconUrl;
+      CV.images[pr.id] = img;
+    }
   }
 
   CV.canvas = document.getElementById('constellation');
@@ -206,12 +211,22 @@ function drawConstellation() {
     ctx.fill();
 
     if (n.type === 'project') {
+      const icon = CV.images[n.id];
+      const s = n.r * 1.25;
       ctx.save();
       ctx.translate(n.x, n.y);
       ctx.rotate(Math.PI / 4);
       ctx.fillStyle = n.color;
-      const s = n.r * 1.25;
       ctx.fillRect(-s / 2, -s / 2, s, s);
+      if (icon && icon.complete && icon.naturalWidth) {
+        // clip to the diamond, then draw the logo upright inside it
+        ctx.beginPath();
+        ctx.rect(-s / 2 + 1, -s / 2 + 1, s - 2, s - 2);
+        ctx.clip();
+        ctx.rotate(-Math.PI / 4);
+        ctx.drawImage(icon, -n.r, -n.r, n.r * 2, n.r * 2);
+        ctx.rotate(Math.PI / 4);
+      }
       ctx.strokeStyle = 'rgba(255,255,255,0.35)';
       ctx.lineWidth = 1;
       ctx.strokeRect(-s / 2, -s / 2, s, s);
