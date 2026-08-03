@@ -236,6 +236,7 @@ img.avatar { object-fit: cover; }
   background: rgba(255, 255, 255, 0.02);
 }
 .proj-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.proj-head strong { display: flex; align-items: center; gap: 8px; }
 .proj-team { font-size: 12px; color: var(--ink-muted); white-space: nowrap; }
 
 .project-card { gap: 12px; }

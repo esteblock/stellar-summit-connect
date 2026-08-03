@@ -423,7 +423,7 @@ function personCardHtml(p) {
 
   const projHtml = projectsOf(p.id).map((pr) => `
     <div class="proj">
-      <div class="proj-head"><strong>${esc(pr.name)}</strong>
+      <div class="proj-head"><strong>${pr.iconUrl ? `<img class="proj-mini-icon" src="${esc(pr.iconUrl)}" alt="" loading="lazy" />` : ''}${esc(pr.name)}</strong>
         ${pr.members.length > 1 ? `<span class="proj-team">👥 ${pr.members.length}</span>` : ''}</div>
       ${pr.oneLiner ? `<div class="card-oneliner">${esc(pr.oneLiner)}</div>` : ''}
       ${(pr.categories || []).length ? `<div class="badges">${pr.categories.map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}</div>` : ''}
