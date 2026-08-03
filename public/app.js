@@ -111,6 +111,8 @@ function normalizeLink(l) {
   return /^https?:\/\//i.test(l) ? l : `https://${l}`;
 }
 
+const stageClass = (s) => `stage-${String(s).replace(/\W+/g, '-')}`;
+
 function projectImage(pr) {
   if (pr.imageUrl) return pr.imageUrl;
   if (pr.links && pr.links.length) {
@@ -432,7 +434,7 @@ function personCardHtml(p) {
         ${pr.members.length > 1 ? `<span class="proj-team">👥 ${pr.members.length}</span>` : ''}</div>
       ${pr.oneLiner ? `<div class="card-oneliner">${esc(pr.oneLiner)}</div>` : ''}
       ${(pr.categories || []).length || pr.stage ? `<div class="badges">
-        ${pr.stage ? `<span class="badge stage-${esc(pr.stage)}">${esc(pr.stage)}</span>` : ''}
+        ${pr.stage ? `<span class="badge ${stageClass(pr.stage)}">${esc(pr.stage)}</span>` : ''}
         ${(pr.categories || []).map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}
       </div>` : ''}
       ${(pr.links || []).length ? `<div class="card-links">${pr.links.map((l) =>
@@ -513,7 +515,7 @@ function projectCardHtml(pr, rank = 99) {
     ${pr.customer ? `<div class="card-oneliner">🎯 <strong>Customer:</strong> ${esc(pr.customer)}</div>` : ''}
     ${pr.lookingFor ? `<div class="looking-for"><b>Project looking for</b>${esc(pr.lookingFor)}</div>` : ''}
     ${(pr.categories || []).length || pr.stage ? `<div class="badges">
-      ${pr.stage ? `<span class="badge stage-${esc(pr.stage)}">${esc(pr.stage)}</span>` : ''}
+      ${pr.stage ? `<span class="badge ${stageClass(pr.stage)}">${esc(pr.stage)}</span>` : ''}
       ${(pr.categories || []).map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}
     </div>` : ''}
     <div class="crew">
@@ -860,6 +862,7 @@ function projectBlockEl(data = {}) {
           <select class="pb-stage">
             <option value="">Where are you at?</option>
             ${['Idea', 'MVP', 'Testnet', 'Mainnet'].map((s) => `<option${data.stage === s ? ' selected' : ''}>${s}</option>`).join('')}
+            <option value="Not onchain"${data.stage === 'Not onchain' ? ' selected' : ''}>Not onchain (education, etc)</option>
           </select>
         </label>
       </div>
@@ -1204,6 +1207,48 @@ function renderAiMatches(matches) {
   }).join('');
   bindCardActions('#ai-results');
 }
+
+/* ---------- Ask AI chat bubble ---------- */
+
+const chatHistory = [];
+
+function appendChatMsg(role, text) {
+  const div = document.createElement('div');
+  div.className = `chat-msg chat-${role}`;
+  div.textContent = text;
+  const box = $('#chat-messages');
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+$('#chat-bubble').addEventListener('click', () => {
+  if (!requireProfile()) return;
+  $('#chat-panel').classList.toggle('hidden');
+  if (!$('#chat-panel').classList.contains('hidden')) $('#chat-input').focus();
+});
+$('#chat-close').addEventListener('click', () => $('#chat-panel').classList.add('hidden'));
+
+$('#chat-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = $('#chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  chatHistory.push({ role: 'user', content: text });
+  appendChatMsg('user', text);
+  const pending = appendChatMsg('assistant', 'Thinking… ✦');
+  try {
+    const { reply } = await api('/api/chat', { body: { messages: chatHistory.slice(-12) } });
+    chatHistory.push({ role: 'assistant', content: reply });
+    pending.textContent = reply;
+  } catch (err) {
+    chatHistory.pop(); // failed question doesn't poison the history
+    pending.textContent = err.message;
+    pending.classList.add('chat-err');
+  }
+  $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+});
 
 /* ---------- export ---------- */
 

@@ -67,6 +67,7 @@
         <option>MVP</option>
         <option>Testnet</option>
         <option>Mainnet</option>
+        <option value="Not onchain">Not onchain (education, etc)</option>
       </select>
     </div>
     <p id="projects-count" class="count-line"></p>
@@ -235,6 +236,21 @@
   <span>Created with ❤️ by <a href="https://x.com/esteblock" target="_blank" rel="noopener">esteblock</a>
     from <a href="https://x.com/PaltaLabs" target="_blank" rel="noopener">PaltaLabs 🥑</a></span>
 </footer>
+
+<button id="chat-bubble" class="chat-bubble" title="Ask AI — who's here & who to meet">✨</button>
+<div id="chat-panel" class="chat-panel hidden">
+  <div class="chat-head">
+    <span>Ask AI · who's here &amp; who to meet</span>
+    <button id="chat-close" class="chat-close" title="Close">✕</button>
+  </div>
+  <div id="chat-messages" class="chat-messages">
+    <div class="chat-msg chat-assistant">Hey ✦ Ask me about the builders and projects here — “who's building payments?”, “who should I meet about anchors?”, “which projects are on Mainnet?”</div>
+  </div>
+  <form id="chat-form" class="chat-form">
+    <input id="chat-input" maxlength="600" placeholder="Who should I meet about…?" autocomplete="off" />
+    <button class="btn primary" title="Send">➤</button>
+  </form>
+</div>
 
 <div id="toast" class="toast hidden"></div>
 
