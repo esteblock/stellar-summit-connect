@@ -380,6 +380,14 @@ img.avatar { object-fit: cover; }
 .email-row { font-size: 13px; color: var(--ink-2); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .email-row strong { color: var(--ink); }
 
+.handle-wrap {
+  display: flex; align-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+}
+.handle-wrap:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.handle-at { padding-left: 12px; color: var(--ink-muted); font-size: 14px; user-select: none; }
+.handle-wrap input { border: none; background: none; outline: none !important; padding-left: 3px; }
+
 .city-wrap { position: relative; display: block; }
 .suggestions {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 30;

@@ -728,6 +728,13 @@ const form = $('#join-form');
 
 /* ---------- country dropdown + city autocomplete (no typos on the map) ---------- */
 
+// the @ is drawn by the field itself — strip any @ people type or paste
+['x', 'telegram'].forEach((name) => {
+  form.elements[name].addEventListener('input', (e) => {
+    if (e.target.value.includes('@')) e.target.value = e.target.value.replace(/@/g, '');
+  });
+});
+
 const countrySel = $('#country-select');
 
 function fillCountrySelect() {
@@ -995,7 +1002,9 @@ function prefillMyProfile() {
   for (const [k, v] of Object.entries(me)) {
     if (k === 'country') continue; // handled below (select needs a matching option)
     const input = form.elements[k];
-    if (input && typeof v === 'string') input.value = v;
+    if (input && typeof v === 'string') {
+      input.value = (k === 'x' || k === 'telegram') ? v.replace(/@/g, '') : v;
+    }
   }
   setCountryValue(me.country);
   if (me.photoUrl) {

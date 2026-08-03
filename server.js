@@ -121,6 +121,9 @@ function cleanStringArray(arr, maxLen, maxItems) {
 
 function cleanPerson(body) {
   const p = cleanText(body, PERSON_FIELDS);
+  // handles are stored bare — the UI draws the @
+  if (p.x) p.x = p.x.replace(/@/g, '');
+  if (p.telegram) p.telegram = p.telegram.replace(/@/g, '');
   // city coordinates, geocoded client-side at save time
   if (Number.isFinite(body.lat) && Math.abs(body.lat) <= 90) p.lat = body.lat;
   if (Number.isFinite(body.lon) && Math.abs(body.lon) <= 180) p.lon = body.lon;
