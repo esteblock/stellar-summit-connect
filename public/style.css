@@ -101,6 +101,7 @@ input:focus, select:focus, textarea:focus {
 }
 img.avatar { object-fit: cover; }
 .avatar-lg { width: 76px; height: 76px; font-size: 26px; }
+.proj-avatar { border-radius: 10px; }
 
 .badges { display: flex; flex-wrap: wrap; gap: 6px; }
 .badge {

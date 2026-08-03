@@ -113,6 +113,13 @@ function normalizeLink(l) {
 
 const stageClass = (s) => `stage-${String(s).replace(/\W+/g, '-')}`;
 
+// small square identity for a project: its 1:1 logo, or initials on its category hue
+function projectIconHtml(pr, cls = 'avatar') {
+  if (pr.iconUrl) return `<img class="${cls} proj-avatar" src="${esc(pr.iconUrl)}" alt="" loading="lazy" />`;
+  const [h1] = CATEGORY_HUES[(pr.categories || [])[0]] || CATEGORY_HUES.Other;
+  return `<div class="${cls} proj-avatar" style="background:${h1}">${esc(initials(pr.name || '?'))}</div>`;
+}
+
 function projectImage(pr) {
   if (pr.imageUrl) return pr.imageUrl;
   if (pr.links && pr.links.length) {
@@ -1273,8 +1280,7 @@ async function loadMetrics() {
     ? stats.topTried.map(({ id, count }) => {
         const pr = projectById[id];
         if (!pr) return '';
-        const team = membersOf(pr);
-        return `<li>${team[0] ? avatarHtml(team[0]) : ''}<span>${esc(pr.name)}</span>
+        return `<li>${projectIconHtml(pr)}<span>${esc(pr.name)}</span>
           <span class="conn-count">🧪 ${count}</span></li>`;
       }).join('')
     : '<li class="count-line">Try someone’s app and hit “I tried it 🧪”!</li>';
