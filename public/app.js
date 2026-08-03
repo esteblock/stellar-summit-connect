@@ -552,7 +552,19 @@ function renderMap() {
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 12,
     }).addTo(state.map);
-    state.mapMarkers = L.layerGroup().addTo(state.map);
+    // cluster overlapping pins into a count bubble; a tap fans them out
+    state.mapMarkers = L.markerClusterGroup
+      ? L.markerClusterGroup({
+          showCoverageOnHover: false,
+          maxClusterRadius: 44,
+          spiderfyDistanceMultiplier: 1.6,
+          iconCreateFunction: (cluster) => L.divIcon({
+            className: 'pin-anchor',
+            html: `<div class="pin-cluster">${cluster.getChildCount()}</div>`,
+            iconSize: [42, 42], iconAnchor: [21, 21],
+          }),
+        }).addTo(state.map)
+      : L.layerGroup().addTo(state.map); // plugin CDN unreachable — plain pins
     document.querySelectorAll('#map-mode input').forEach((r) => r.addEventListener('change', renderMap));
   }
   state.map.invalidateSize();
@@ -570,26 +582,18 @@ function renderMap() {
     return c ? { lat: c.lat, lon: c.lon, label: c.label, exact: false } : null;
   };
 
-  // photo/logo pins; markers sharing a spot spread on a small ring
-  const addMarker = (() => {
-    const seen = {};
-    return (pos, popup, { imgUrl, fallbackText, fallbackBg, shape }) => {
-      const key = `${pos.lat.toFixed(2)},${pos.lon.toFixed(2)}`;
-      const i = seen[key] = (seen[key] || 0) + 1;
-      const r = pos.exact ? 0.015 : 0.7;
-      const dy = i === 1 ? 0 : r * Math.sin(i * 2.4);
-      const dx = i === 1 ? 0 : r * 1.3 * Math.cos(i * 2.4);
-      const inner = imgUrl
-        ? `<img src="${esc(imgUrl)}" alt="" />`
-        : `<span style="background:${fallbackBg}">${esc(fallbackText)}</span>`;
-      const icon = L.divIcon({
-        className: 'pin-anchor',
-        html: `<div class="pin ${shape}">${inner}</div>`,
-        iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -20],
-      });
-      L.marker([pos.lat + dy, pos.lon + dx], { icon }).bindPopup(popup).addTo(state.mapMarkers);
-    };
-  })();
+  // photo/logo pins; overlapping ones cluster and fan out on tap
+  const addMarker = (pos, popup, { imgUrl, fallbackText, fallbackBg, shape }) => {
+    const inner = imgUrl
+      ? `<img src="${esc(imgUrl)}" alt="" />`
+      : `<span style="background:${fallbackBg}">${esc(fallbackText)}</span>`;
+    const icon = L.divIcon({
+      className: 'pin-anchor',
+      html: `<div class="pin ${shape}">${inner}</div>`,
+      iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -20],
+    });
+    state.mapMarkers.addLayer(L.marker([pos.lat, pos.lon], { icon }).bindPopup(popup));
+  };
 
   if (mode === 'people') {
     for (const p of state.people) {
