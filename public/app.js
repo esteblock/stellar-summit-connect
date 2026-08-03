@@ -61,10 +61,10 @@ function show(view) {
   $(`#view-${view}`).classList.remove('hidden');
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
   if (location.hash !== `#${view}`) history.replaceState(null, '', `#${view}`);
-  if (view === 'builders' || view === 'projects') loadData();
-  if (view === 'metrics') loadMetrics();
-  if (view === 'map') loadData().then(renderMap);
-  if (view === 'constellation') loadData().then(renderConstellation);
+  if (view === 'builders' || view === 'projects') loadData().catch(() => toast('Connection hiccup — retrying ✦'));
+  if (view === 'metrics') loadMetrics().catch(() => toast('Connection hiccup — retrying ✦'));
+  if (view === 'map') loadData().then(renderMap).catch(() => {});
+  if (view === 'constellation') loadData().then(renderConstellation).catch(() => {});
 }
 
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => show(t.dataset.view)));
@@ -231,18 +231,23 @@ $('#gate-form').addEventListener('submit', async (e) => {
   }
 });
 
-async function loadData() {
-  const [{ people }, { projects }, { tries }, { questions }] = await Promise.all([
-    api('/api/people'), api('/api/projects'), api('/api/tries'), api('/api/questions'),
-  ]);
-  state.people = people;
-  state.projects = projects;
-  state.tries = tries;
-  state.questions = questions;
-  fillFilterOptions();
-  renderCards();
-  renderProjectCards();
-  refreshExistingOptions();
+let loadInFlight = null;
+function loadData() {
+  if (loadInFlight) return loadInFlight; // single-flight: reuse the load already running
+  loadInFlight = (async () => {
+    const [{ people }, { projects }, { tries }, { questions }] = await Promise.all([
+      api('/api/people'), api('/api/projects'), api('/api/tries'), api('/api/questions'),
+    ]);
+    state.people = people;
+    state.projects = projects;
+    state.tries = tries;
+    state.questions = questions;
+    fillFilterOptions();
+    renderCards();
+    renderProjectCards();
+    refreshExistingOptions();
+  })().finally(() => { loadInFlight = null; });
+  return loadInFlight;
 }
 
 async function fetchMe() {
@@ -1432,15 +1437,22 @@ $('#export-csv').addEventListener('click', () =>
 
 const initialView = ['builders', 'projects', 'constellation', 'ai', 'map', 'join', 'metrics'].includes(location.hash.slice(1))
   ? location.hash.slice(1) : 'builders';
-loadData()
-  .then(async () => {
-    await fetchMe();
-    prefillMyProfile();
-    show(initialView);
-  })
-  .catch(() => showGate()); // no/wrong event password yet
+async function boot() {
+  try {
+    await loadData();
+  } catch (err) {
+    // only a real auth failure opens the gate; flaky network retries quietly
+    if (String(err.message).includes('password')) { showGate(); return; }
+    setTimeout(boot, 1500);
+    return;
+  }
+  await fetchMe();
+  prefillMyProfile();
+  show(initialView);
+}
+boot();
 setInterval(() => {
   const active = document.querySelector('.tab.active')?.dataset.view;
-  if (active === 'builders' || active === 'projects') loadData();
-  if (active === 'metrics') loadMetrics();
-}, 20000); // live-ish refresh while projected on a screen
+  if (active === 'builders' || active === 'projects') loadData().catch(() => {});
+  if (active === 'metrics') loadMetrics().catch(() => {});
+}, 20000); // live-ish refresh while projected on a screen; a failed tick retries next tick
