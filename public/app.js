@@ -1161,6 +1161,46 @@ function renderCloud(sel, words, ramp) {
   }).join('');
 }
 
+/* ---------- category × stage heatmap ---------- */
+
+function renderHeatmap() {
+  const el = $('#heatmap');
+  const STAGES = ['Idea', 'MVP', 'Testnet', 'Mainnet', 'Not onchain'];
+  const cats = [...new Set(state.projects.flatMap((pr) => pr.categories || []))];
+  if (!cats.length) {
+    el.innerHTML = '<p class="count-line">No projects with categories yet.</p>';
+    return;
+  }
+  const cell = {};
+  for (const pr of state.projects) {
+    const stage = STAGES.includes(pr.stage) ? pr.stage : null;
+    if (!stage) continue;
+    for (const c of pr.categories || []) {
+      cell[`${c}|${stage}`] = (cell[`${c}|${stage}`] || []).concat(pr.name);
+    }
+  }
+  // rows sorted by total projects, biggest first — the hot rows float to the top
+  const rowTotal = (c) => STAGES.reduce((s, st) => s + (cell[`${c}|${st}`]?.length || 0), 0);
+  cats.sort((a, b) => rowTotal(b) - rowTotal(a));
+  const max = Math.max(1, ...Object.values(cell).map((v) => v.length));
+  const RAMP = ['#16406f', '#1c5cab', '#2a78d6', '#3987e5', '#6da7ec'];
+
+  el.innerHTML = `<div class="heatmap" style="grid-template-columns: minmax(96px, auto) repeat(${STAGES.length}, 1fr)">
+    <div></div>
+    ${STAGES.map((s) => `<div class="hm-col">${esc(s === 'Not onchain' ? 'Not onchain' : s)}</div>`).join('')}
+    ${cats.map((c) => `
+      <div class="hm-row" title="${esc(c)}">${esc(c)}</div>
+      ${STAGES.map((s) => {
+        const names = cell[`${c}|${s}`] || [];
+        const n = names.length;
+        if (!n) return '<div class="hm-cell hm-zero"></div>';
+        const color = RAMP[Math.min(RAMP.length - 1, Math.floor((n / max) * RAMP.length))];
+        return `<div class="hm-cell" style="background:${color}" title="${esc(c)} · ${esc(s)}: ${esc(names.join(', '))}">${n}</div>`;
+      }).join('')}`).join('')}
+  </div>
+  <p class="count-line">brighter = more projects · hover a cell to see which ones · projects with several categories count in each</p>`;
+}
+
 /* ---------- metrics ---------- */
 
 async function loadMetrics() {
@@ -1213,6 +1253,8 @@ async function loadMetrics() {
           <span class="conn-count">${count} connection${count === 1 ? '' : 's'}</span></li>`;
       }).join('')
     : '<li class="count-line">No connections yet — hit “Connect ✦” on someone’s card!</li>';
+
+  renderHeatmap();
 
   // word clouds: what people/projects are looking for vs what they're building
   renderCloud('#cloud-needs',
