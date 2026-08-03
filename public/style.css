@@ -78,7 +78,7 @@ input:focus, select:focus, textarea:focus {
 
 .cards {
   display: grid; gap: 14px;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
 }
 
 .card {
@@ -200,7 +200,7 @@ img.avatar { object-fit: cover; }
 .tile .tile-value { font-size: 32px; font-weight: 700; line-height: 1.15; }
 .tile .tile-label { font-size: 12.5px; color: var(--ink-muted); margin-top: 2px; }
 
-.metrics-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.metrics-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
 .metrics-grid h3 { font-size: 15px; margin-bottom: 14px; }
 
 /* horizontal bar chart — single hue, thin marks, rounded data-end, direct labels */
@@ -470,7 +470,7 @@ img.avatar { object-fit: cover; }
 
 .landing-grid {
   display: grid; gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
 }
 .landing-tile {
   border: 1px solid transparent; border-radius: var(--radius); padding: 20px;
@@ -510,8 +510,53 @@ img.avatar { object-fit: cover; }
   box-shadow: 0 6px 24px rgba(0,0,0,0.5);
 }
 
-@media (max-width: 640px) {
-  .topbar { padding: 12px 14px; }
-  .brand h1 { font-size: 16px; }
+/* ---------- mobile: app-style bottom navigation ---------- */
+
+@media (max-width: 700px) {
+  /* backdrop-filter would become the containing block for the fixed tab bar */
+  .topbar { position: static; padding: 12px 14px; backdrop-filter: none; }
+  .brand h1 { font-size: 15px; }
+  .brand-sub { display: none; }
+  .brand-star { font-size: 22px; }
+
+  .tabs {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 45;
+    background: rgba(13, 13, 13, 0.92); backdrop-filter: blur(10px);
+    border-top: 1px solid var(--hairline);
+    display: flex; justify-content: space-around; gap: 0;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  }
+  .tab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-size: 10px; padding: 4px 2px; border: none; border-radius: 10px;
+    white-space: nowrap; overflow: hidden;
+  }
+  .tab::before { content: attr(data-icon); font-size: 17px; line-height: 1.2; }
+  .tab[data-view="constellation"] { font-size: 0; }               /* label too long — icon + short word */
+  .tab[data-view="constellation"]::before { font-size: 17px; color: var(--accent); }
+  .tab[data-view="constellation"]::after { content: 'Stars'; font-size: 10px; }
+  .tab.active { background: var(--surface-2); border: none; }
+
+  main { padding-bottom: 96px; }
+  .footer { padding-bottom: 104px; }
+  .toast { bottom: 92px; width: max-content; max-width: 92vw; }
+
+  /* iOS zooms into inputs under 16px — keep form text at 16px on touch */
+  input, select, textarea { font-size: 16px; }
+
+  .filters-row { gap: 8px; }
+  .filters-row select { flex: 1 1 44%; }
+
+  #map, #constellation-wrap { height: 60vh; }
+  .constellation-legend { gap: 8px 12px; }
+
+  .tiles { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .tile { padding: 12px 14px; }
+  .tile .tile-value { font-size: 26px; }
   .hbar-row { grid-template-columns: 96px 1fr 30px; }
+
+  .panel { padding: 16px; }
+  #join-form { margin: 12px auto; }
+  .landing-inner { padding: 6vh 18px 40px; gap: 32px; }
+  .card-foot { flex-wrap: wrap; gap: 8px; }
 }
