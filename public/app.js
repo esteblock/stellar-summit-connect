@@ -428,19 +428,34 @@ function personCardHtml(p) {
     action = `<button class="btn small primary" data-connect="${esc(p.id)}">Connect ✦</button>`;
   }
 
-  const projHtml = projectsOf(p.id).map((pr) => `
-    <div class="proj">
-      <div class="proj-head"><strong>${pr.iconUrl ? `<img class="proj-mini-icon" src="${esc(pr.iconUrl)}" alt="" loading="lazy" />` : ''}${esc(pr.name)}</strong>
-        ${pr.members.length > 1 ? `<span class="proj-team">👥 ${pr.members.length}</span>` : ''}</div>
-      ${pr.oneLiner ? `<div class="card-oneliner">${esc(pr.oneLiner)}</div>` : ''}
-      ${(pr.categories || []).length || pr.stage ? `<div class="badges">
-        ${pr.stage ? `<span class="badge ${stageClass(pr.stage)}">${esc(pr.stage)}</span>` : ''}
-        ${(pr.categories || []).map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}
-      </div>` : ''}
-      ${(pr.links || []).length ? `<div class="card-links">${pr.links.map((l) =>
-        `<a href="${esc(normalizeLink(l))}" target="_blank" rel="noopener">${esc(l.replace(/^https?:\/\//, ''))}</a>`).join('')}</div>` : ''}
-      ${tryRowHtml(pr)}
-    </div>`).join('');
+  // collapsed by default: logo + name + one-liner; click to expand the rest
+  const projHtml = projectsOf(p.id).map((pr) => {
+    const key = `proj:${p.id}:${pr.id}`;
+    return `<details class="proj" data-qa="${esc(key)}"${qaOpen.has(key) ? ' open' : ''}>
+      <summary class="proj-summary">
+        ${pr.iconUrl
+          ? `<img class="proj-mini-icon" src="${esc(pr.iconUrl)}" alt="" loading="lazy" />`
+          : '<span class="proj-mini-fallback">✦</span>'}
+        <span class="proj-sum-text">
+          <strong>${esc(pr.name)}</strong>
+          ${pr.oneLiner ? `<span class="proj-sum-one">${esc(pr.oneLiner)}</span>` : ''}
+        </span>
+        ${pr.members.length > 1 ? `<span class="proj-team">👥 ${pr.members.length}</span>` : ''}
+        <span class="proj-chevron">▸</span>
+      </summary>
+      <div class="proj-body">
+        ${(pr.categories || []).length || pr.stage ? `<div class="badges">
+          ${pr.stage ? `<span class="badge ${stageClass(pr.stage)}">${esc(pr.stage)}</span>` : ''}
+          ${(pr.categories || []).map((c) => `<span class="badge cat">${esc(c)}</span>`).join('')}
+        </div>` : ''}
+        ${pr.customer ? `<div class="card-oneliner">🎯 <strong>Customer:</strong> ${esc(pr.customer)}</div>` : ''}
+        ${pr.lookingFor ? `<div class="looking-for"><b>Project looking for</b>${esc(pr.lookingFor)}</div>` : ''}
+        ${(pr.links || []).length ? `<div class="card-links">${pr.links.map((l) =>
+          `<a href="${esc(normalizeLink(l))}" target="_blank" rel="noopener">${esc(l.replace(/^https?:\/\//, ''))}</a>`).join('')}</div>` : ''}
+        ${tryRowHtml(pr)}
+      </div>
+    </details>`;
+  }).join('');
 
   return `<article class="card" data-bid="${esc(p.id)}">
     <div class="card-head">
