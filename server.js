@@ -182,6 +182,16 @@ const matchCache = new Map(); // personId → {at, data}
 const MATCH_TTL_MS = 10 * 60 * 1000;
 const chatCooldown = new Map(); // personId → last request ms
 
+// internal audit log of every AI interaction — append-only JSONL, never served by the API
+const AI_AUDIT_FILE = path.join(DATA_DIR, 'ai-audit.jsonl');
+function auditAI(entry) {
+  try {
+    fs.appendFileSync(AI_AUDIT_FILE, JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n');
+  } catch (err) {
+    console.error('AI audit write failed', err);
+  }
+}
+
 function matchBlurb(p) {
   const projects = state.projects
     .filter((pr) => pr.members.includes(p.id))
@@ -624,6 +634,11 @@ const server = http.createServer(async (req, res) => {
       const data = await r.json();
       const reply = (data.choices?.[0]?.message?.content || '').trim();
       if (!reply) return sendJson(res, 502, { error: 'the AI went quiet, try again' });
+      auditAI({
+        kind: 'chat', personId: person.id, personName: person.name,
+        question: history[history.length - 1].content, reply,
+        model: process.env.AI_MODEL || 'google/gemini-2.5-flash',
+      });
       return sendJson(res, 200, { reply });
     }
 
@@ -687,6 +702,11 @@ const server = http.createServer(async (req, res) => {
         }));
       const result = { matches, generatedAt: new Date().toISOString(), model };
       matchCache.set(person.id, { at: Date.now(), data: result });
+      auditAI({
+        kind: 'match', personId: person.id, personName: person.name,
+        model, matchCount: matches.length,
+        matchedIds: matches.map((m) => m.personId),
+      });
       return sendJson(res, 200, result);
     }
 
