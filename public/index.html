@@ -27,6 +27,7 @@
     <button class="tab" data-view="projects" data-icon="🃏">Projects</button>
     <button class="tab" data-view="constellation" data-icon="✦">Constellation ✦</button>
     <button class="tab" data-view="planet" data-icon="🪐">Planet</button>
+    <button class="tab" data-view="race" data-icon="🏆">Race</button>
     <button class="tab" data-view="ai" data-icon="✨">AI Match</button>
     <button class="tab" data-view="map" data-icon="🗺️">Map</button>
     <button class="tab" data-view="join" data-icon="➕">Join</button>
@@ -113,12 +114,27 @@
       <button class="legend-item edge-toggle off" data-edge="try" title="Show/hide tried-it"><span class="legend-line legend-dashed"></span>tried it</button>
       <button class="legend-item edge-toggle" data-edge="member" title="Show/hide teams"><span class="legend-line" style="background:rgba(255,255,255,.85)"></span>team</button>
       <button id="cv-replay" class="btn ghost small" title="Replay how the constellation formed">⏪ Timelapse</button>
+      <button id="cv-invite" class="btn ghost small cv-invite" title="Copy your referral link — every builder you invite earns you points in the Race 🏆">🔗 Invite = points</button>
       <span class="count-line">drag the stars · click for details · toggle line types above</span>
     </div>
     <div id="constellation-wrap">
       <canvas id="constellation"></canvas>
       <div id="cv-tip" class="cv-tip hidden"></div>
     </div>
+  </section>
+
+  <!-- ============ REFERRAL RACE ============ -->
+  <section id="view-race" class="view hidden">
+    <div class="race-hero">
+      <p class="race-eyebrow">✦ referral race ✦</p>
+      <h2>Bring the room on board 🏆</h2>
+      <p class="race-sub">Invite builders with your link, complete your profile, climb the board.</p>
+      <div class="race-prize">🥑 <strong>DeFindex</strong> gives prizes to the <strong>TOP 10</strong> at the end of the summit</div>
+    </div>
+    <div id="race-me"></div>
+    <div id="race-podium" class="race-podium"></div>
+    <div id="race-list" class="race-list"></div>
+    <p id="race-rules" class="count-line race-rules"></p>
   </section>
 
   <!-- ============ AI MATCH ============ -->

@@ -206,6 +206,61 @@ function matchBlurb(p) {
   };
 }
 
+// ---------- referral race ----------
+// Points are always derived from current data — completing your profile later
+// still counts, and your referrers' totals update with yours. referredBy is set
+// once at profile creation and never changes, so referral chains cannot cycle.
+
+const RACE_POINTS = {
+  join: 10, photo: 15, description: 10,
+  project: 15, projectCap: 3,
+  l1Rate: 0.5, l2Rate: 0.25,
+};
+
+function raceBasePoints(p) {
+  const projectCount = Math.min(
+    state.projects.filter((pr) => pr.members.includes(p.id)).length,
+    RACE_POINTS.projectCap
+  );
+  const b = {
+    join: RACE_POINTS.join,
+    photo: p.photoUrl ? RACE_POINTS.photo : 0,
+    description: (p.lookingFor || '').trim().length >= 20 ? RACE_POINTS.description : 0,
+    projects: projectCount * RACE_POINTS.project,
+    projectCount,
+  };
+  b.total = b.join + b.photo + b.description + b.projects;
+  return b;
+}
+
+function computeLeaderboard() {
+  const base = new Map(state.people.map((p) => [p.id, raceBasePoints(p)]));
+  const rows = state.people.map((p) => {
+    const l1 = state.people.filter((o) => o.referredBy === p.id);
+    const l1Ids = new Set(l1.map((o) => o.id));
+    const l2 = state.people.filter((o) => l1Ids.has(o.referredBy));
+    const l1Points = l1.reduce((s, o) => s + Math.round(base.get(o.id).total * RACE_POINTS.l1Rate), 0);
+    const l2Points = l2.reduce((s, o) => s + Math.round(base.get(o.id).total * RACE_POINTS.l2Rate), 0);
+    const own = base.get(p.id);
+    return {
+      id: p.id,
+      base: own,
+      referrals: l1.map((o) => ({
+        id: o.id,
+        earned: Math.round(base.get(o.id).total * RACE_POINTS.l1Rate),
+      })).sort((a, b) => b.earned - a.earned),
+      l2Count: l2.length,
+      l1Points, l2Points,
+      total: own.total + l1Points + l2Points,
+      createdAt: p.createdAt,
+    };
+  });
+  // ties break by who joined first
+  rows.sort((a, b) => b.total - a.total ||
+    String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+  return { points: RACE_POINTS, rows };
+}
+
 // ---------- stats ----------
 
 function computeStats() {
@@ -411,6 +466,10 @@ const server = http.createServer(async (req, res) => {
       let created = false;
       if (!person) {
         person = { id: crypto.randomUUID(), email, createdAt: new Date().toISOString() };
+        // referral credit is claimed once, at creation — the referrer must already exist
+        const referrer = typeof body.ref === 'string'
+          ? state.people.find((p) => p.id === body.ref) : null;
+        if (referrer) person.referredBy = referrer.id;
         state.people.push(person);
         created = true;
       }
@@ -580,6 +639,10 @@ const server = http.createServer(async (req, res) => {
 
     if (route === 'GET /api/stats') {
       return sendJson(res, 200, computeStats());
+    }
+
+    if (route === 'GET /api/leaderboard') {
+      return sendJson(res, 200, computeLeaderboard());
     }
 
     // ---------- Ask AI concierge chat (connecting only) ----------

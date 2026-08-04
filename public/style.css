@@ -823,3 +823,194 @@ img.avatar { object-fit: cover; }
   .landing-inner { padding: 6vh 18px 40px; gap: 32px; }
   .card-foot { flex-wrap: wrap; gap: 8px; }
 }
+
+/* ---------- referral race 🏆 ---------- */
+
+.race-hero { text-align: center; padding: 26px 12px 8px; }
+.race-eyebrow {
+  font-size: 12px; letter-spacing: 0.25em; text-transform: uppercase;
+  color: var(--ink-muted); margin-bottom: 8px;
+}
+.race-hero h2 {
+  font-family: 'Unbounded', system-ui, sans-serif; font-size: clamp(22px, 4vw, 34px);
+  background: linear-gradient(90deg, #c98500, #e6b84a, #3987e5, #9085e9, #c98500);
+  background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: race-sheen 6s linear infinite;
+}
+@keyframes race-sheen { to { background-position: 300% 0; } }
+.race-sub { color: var(--ink-2); margin-top: 8px; font-size: 14.5px; }
+.race-prize {
+  display: inline-block; margin-top: 14px; padding: 9px 18px; border-radius: 999px;
+  font-size: 14px; color: var(--ink);
+  background: linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(90deg, #c98500, #e6b84a, #c98500) border-box;
+  border: 1.5px solid transparent;
+  box-shadow: 0 0 24px rgba(201, 133, 0, 0.25);
+}
+
+/* --- my card: rank, link, missions --- */
+.race-me-card {
+  margin: 18px auto 8px; max-width: 860px; border-radius: var(--radius);
+  background: linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(120deg, rgba(57,135,229,.8), rgba(144,133,233,.5), rgba(201,133,0,.6)) border-box;
+  border: 1px solid transparent; padding: 18px;
+}
+.race-me-top { display: flex; gap: 20px; align-items: stretch; flex-wrap: wrap; }
+.race-me-rank {
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  min-width: 120px; padding: 10px 16px; border-radius: 12px; background: var(--surface-2);
+}
+.race-me-rank-label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-muted); }
+.race-me-rank-value {
+  font-family: 'Unbounded', system-ui, sans-serif; font-size: 34px; line-height: 1.15; color: var(--ink);
+}
+.race-me-points { font-size: 13px; color: var(--ink-2); }
+.race-me-points b { color: #e6b84a; font-size: 16px; }
+.race-me-link { flex: 1 1 320px; display: flex; flex-direction: column; gap: 9px; justify-content: center; }
+.race-me-link-label { font-size: 13px; color: var(--ink-2); }
+.race-link-row { display: flex; gap: 8px; align-items: center; }
+.race-link {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: var(--page); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; font-size: 13px; color: var(--series-1);
+}
+.race-share-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.race-missions { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; margin-top: 16px; }
+.race-mission {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 10px; background: var(--surface-2); border: 1px solid var(--hairline);
+  font-size: 13.5px; color: var(--ink-2);
+}
+.race-mission.done { border-color: rgba(25, 158, 112, 0.5); }
+.race-mission.done .race-mission-check { color: #2fbf8b; }
+.race-mission-check { font-size: 15px; color: var(--ink-muted); }
+.race-mission-label { flex: 1; }
+.race-mission-pts { font-weight: 600; color: #e6b84a; white-space: nowrap; }
+.race-mission.boost {
+  grid-column: 1 / -1;
+  background: linear-gradient(90deg, rgba(57,135,229,.14), rgba(144,133,233,.14));
+  border-color: rgba(57, 135, 229, 0.45);
+}
+.race-join { max-width: 560px; margin: 20px auto; text-align: center; }
+.race-join .btn { margin-top: 12px; }
+
+/* --- podium --- */
+.race-podium {
+  display: flex; align-items: flex-end; justify-content: center;
+  gap: clamp(8px, 3vw, 26px); margin: 30px auto 10px; max-width: 720px;
+  border-bottom: 2px solid var(--hairline);
+}
+.podium-col {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  width: clamp(96px, 28vw, 180px); position: relative;
+  animation: podium-rise .7s cubic-bezier(.2, .8, .3, 1.1) backwards;
+}
+.podium-1 { animation-delay: .25s; }
+.podium-2 { animation-delay: .1s; }
+.podium-3 { animation-delay: .4s; }
+@keyframes podium-rise { from { transform: translateY(46px); opacity: 0; } }
+.podium-crown {
+  position: absolute; top: -34px; font-size: 26px; z-index: 2;
+  animation: crown-bob 2.4s ease-in-out infinite;
+}
+@keyframes crown-bob { 50% { transform: translateY(-6px) rotate(-6deg); } }
+.podium-avatar .podium-face {
+  width: clamp(56px, 9vw, 84px); height: clamp(56px, 9vw, 84px);
+  border-radius: 50%; object-fit: cover; display: flex; align-items: center; justify-content: center;
+  font-size: 24px; color: #fff; border: 3px solid var(--surface-2);
+}
+.podium-1 .podium-face { border-color: #e6b84a; box-shadow: 0 0 30px rgba(230, 184, 74, 0.5); }
+.podium-2 .podium-face { border-color: #c3c2b7; box-shadow: 0 0 18px rgba(195, 194, 183, 0.35); }
+.podium-3 .podium-face { border-color: #d95926; box-shadow: 0 0 18px rgba(217, 89, 38, 0.4); }
+.podium-name { font-size: 13.5px; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.podium-invites { font-size: 11.5px; color: var(--ink-muted); }
+.podium-block {
+  width: 100%; border-radius: 12px 12px 0 0; text-align: center;
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  border: 1px solid var(--hairline); border-bottom: none; background: var(--surface);
+}
+.podium-1 .podium-block {
+  height: 128px;
+  background: linear-gradient(180deg, rgba(230, 184, 74, 0.28), rgba(230, 184, 74, 0.05));
+  border-color: rgba(230, 184, 74, 0.5);
+}
+.podium-2 .podium-block {
+  height: 96px;
+  background: linear-gradient(180deg, rgba(195, 194, 183, 0.2), rgba(195, 194, 183, 0.04));
+  border-color: rgba(195, 194, 183, 0.4);
+}
+.podium-3 .podium-block {
+  height: 76px;
+  background: linear-gradient(180deg, rgba(217, 89, 38, 0.22), rgba(217, 89, 38, 0.04));
+  border-color: rgba(217, 89, 38, 0.4);
+}
+.podium-medal { font-size: 22px; }
+.podium-points { font-size: 13px; color: var(--ink-2); }
+.podium-points b { font-family: 'Unbounded', system-ui, sans-serif; font-size: 17px; color: var(--ink); }
+
+/* --- ranked list --- */
+.race-list { max-width: 860px; margin: 14px auto 0; display: flex; flex-direction: column; gap: 6px; }
+.race-row {
+  border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface);
+  overflow: hidden;
+}
+.race-row.in-prize { border-color: rgba(230, 184, 74, 0.35); }
+.race-row summary {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  cursor: pointer; list-style: none;
+}
+.race-row summary::-webkit-details-marker { display: none; }
+.race-row[open] summary { border-bottom: 1px solid var(--hairline); }
+.race-rank {
+  min-width: 30px; text-align: center; font-family: 'Unbounded', system-ui, sans-serif;
+  font-size: 14px; color: var(--ink-muted);
+}
+.race-row.in-prize .race-rank { color: #e6b84a; }
+.race-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; }
+.race-row-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14.5px; }
+.race-row-chips { display: flex; gap: 6px; flex: none; }
+.race-chip {
+  font-size: 11.5px; color: var(--ink-2); background: var(--surface-2);
+  padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+}
+.race-bar { flex: 1 1 60px; height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; min-width: 40px; }
+.race-bar-fill {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--series-1), #9085e9);
+  animation: bar-grow .9s cubic-bezier(.2, .8, .3, 1) backwards;
+}
+.race-row.in-prize .race-bar-fill { background: linear-gradient(90deg, #c98500, #e6b84a); }
+@keyframes bar-grow { from { width: 0; } }
+.race-row-points {
+  min-width: 44px; text-align: right; font-family: 'Unbounded', system-ui, sans-serif;
+  font-size: 15px; color: var(--ink);
+}
+.race-row-detail { padding: 10px 16px 12px; }
+.race-detail-label { font-size: 12.5px; color: var(--ink-muted); margin: 4px 0; }
+.race-invitees { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.race-invitee {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2);
+  background: var(--surface-2); border-radius: 999px; padding: 4px 12px 4px 4px;
+}
+.race-invitee .race-avatar { width: 26px; height: 26px; font-size: 11px; }
+.race-invitee b { color: #2fbf8b; }
+.race-prize-line {
+  display: flex; align-items: center; gap: 12px; margin: 10px 0 4px;
+  color: #e6b84a; font-size: 12.5px; white-space: nowrap;
+}
+.race-prize-line::before, .race-prize-line::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(230, 184, 74, 0.6), transparent);
+}
+.race-rules { text-align: center; max-width: 720px; margin: 22px auto 0; line-height: 1.7; }
+.race-rules b { color: #e6b84a; }
+.cv-invite { border-color: rgba(230, 184, 74, 0.45); }
+
+@media (max-width: 640px) {
+  .race-me-top { flex-direction: column; }
+  .race-me-rank { flex-direction: row; gap: 12px; min-width: 0; }
+  .race-row-chips { display: none; }  /* summary stays one clean line — details on tap */
+  .race-bar { min-width: 24px; }
+}

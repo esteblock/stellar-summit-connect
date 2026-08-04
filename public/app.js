@@ -49,6 +49,15 @@ const state = {
   mapMarkers: null,
 };
 
+// referral capture: /?ref=<personId> — remembered until this visitor saves a profile
+{
+  const refParam = new URLSearchParams(location.search).get('ref');
+  if (refParam) {
+    localStorage.setItem('ssc-ref', refParam);
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
+}
+
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -66,6 +75,7 @@ function show(view) {
   if (view === 'map') loadData().then(renderMap).catch(() => {});
   if (view === 'constellation') loadData().then(renderConstellation).catch(() => {});
   if (view === 'planet') loadData().then(renderPlanet).catch(() => {});
+  if (view === 'race') loadRace().catch(() => toast('Connection hiccup — retrying ✦'));
 }
 
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => show(t.dataset.view)));
@@ -1047,6 +1057,9 @@ form.addEventListener('submit', async (e) => {
   const btn = $('#submit-btn');
   const body = Object.fromEntries(new FormData(form).entries());
   if (state.photoDataUrl) body.photo = state.photoDataUrl;
+  // referral credit — the server only honors it when the profile is first created
+  const savedRef = localStorage.getItem('ssc-ref');
+  if (savedRef) body.ref = savedRef;
 
   btn.disabled = true;
   status.className = 'form-status';
@@ -1427,6 +1440,204 @@ $('#chat-form').addEventListener('submit', async (e) => {
   $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
 });
 
+/* ---------- referral race ---------- */
+
+const refLink = (id) => `${location.origin}/?ref=${encodeURIComponent(id)}`;
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { return document.execCommand('copy'); }
+    catch { return false; }
+    finally { ta.remove(); }
+  }
+}
+
+// eased count-up for every [data-count] inside root
+function runCountUps(root) {
+  root.querySelectorAll('[data-count]').forEach((el) => {
+    const to = Number(el.dataset.count) || 0;
+    const start = performance.now();
+    const ms = 900;
+    const step = (t) => {
+      const k = Math.min(1, (t - start) / ms);
+      el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3)));
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+let lastRaceJson = '';
+async function loadRace() {
+  const [board] = await Promise.all([api('/api/leaderboard'), loadData()]);
+  const json = JSON.stringify(board);
+  if (json === lastRaceJson) return; // nothing changed — keep the current DOM (and its animations) alone
+  lastRaceJson = json;
+  renderRace(board);
+}
+
+function renderRace(board) {
+  renderRaceMe(board);
+  renderRacePodium(board);
+  renderRaceList(board);
+  const P = board.points;
+  $('#race-rules').innerHTML =
+    `scoring: <b>+${P.join}</b> join · <b>+${P.photo}</b> photo · <b>+${P.description}</b> say what you're looking for · ` +
+    `<b>+${P.project}</b> per project (max ${P.projectCap}) · ` +
+    `your invites earn you <b>${P.l1Rate * 100}%</b> of their points · their invites earn you <b>${P.l2Rate * 100}%</b> · ` +
+    `points update live as profiles improve ✦`;
+}
+
+function raceShareText(link) {
+  return `I'm on the Stellar Summit Connect board ✦ Join me — see every builder in the room, their projects, and who to meet: ${link}`;
+}
+
+function renderRaceMe(board) {
+  const el = $('#race-me');
+  if (!state.me || !state.me.id) {
+    el.innerHTML = `<div class="panel race-join">
+      <h3>Get your referral link 🔗</h3>
+      <p class="form-hint">Create your profile to enter the race — then every builder you invite earns you points, and their invites keep paying you too.</p>
+      <button class="btn primary big" data-goto="join">Join &amp; get my link ✦</button>
+    </div>`;
+    return;
+  }
+  const idx = board.rows.findIndex((r) => r.id === state.me.id);
+  const row = board.rows[idx];
+  if (!row) { el.innerHTML = ''; return; }
+  const rank = idx + 1;
+  const P = board.points;
+  const b = row.base;
+  const link = refLink(state.me.id);
+  const missions = [
+    { done: true, label: 'Profile created', pts: `+${P.join}` },
+    { done: b.photo > 0, label: 'Add your photo', pts: `+${P.photo}` },
+    { done: b.description > 0, label: 'Say what you’re looking for', pts: `+${P.description}` },
+    { done: b.projectCount >= P.projectCap, label: b.projectCount ? `Projects added: ${b.projectCount}/${P.projectCap}` : 'Add your project',
+      pts: `+${P.project} each` },
+  ];
+  const shareText = encodeURIComponent(raceShareText(link));
+  const shareUrl = encodeURIComponent(link);
+  el.innerHTML = `<div class="race-me-card">
+    <div class="race-me-top">
+      <div class="race-me-rank">
+        <span class="race-me-rank-label">your rank</span>
+        <span class="race-me-rank-value">#${rank}</span>
+        <span class="race-me-points"><b data-count="${row.total}">0</b> pts</span>
+      </div>
+      <div class="race-me-link">
+        <span class="race-me-link-label">Your referral link — every builder who joins with it earns you points:</span>
+        <div class="race-link-row">
+          <code class="race-link" id="race-link-text">${esc(link)}</code>
+          <button class="btn primary" id="race-copy">Copy 🔗</button>
+        </div>
+        <div class="race-share-row">
+          <a class="btn ghost small" href="https://t.me/share/url?url=${shareUrl}&text=${shareText}" target="_blank" rel="noopener">✈ Telegram</a>
+          <a class="btn ghost small" href="https://wa.me/?text=${shareText}" target="_blank" rel="noopener">🟢 WhatsApp</a>
+          <a class="btn ghost small" href="https://twitter.com/intent/tweet?text=${shareText}" target="_blank" rel="noopener">𝕏 Post</a>
+        </div>
+      </div>
+    </div>
+    <div class="race-missions">
+      ${missions.map((m) => `<div class="race-mission ${m.done ? 'done' : ''}">
+        <span class="race-mission-check">${m.done ? '✓' : '○'}</span>
+        <span class="race-mission-label">${m.label}</span>
+        <span class="race-mission-pts">${m.pts}</span>
+      </div>`).join('')}
+      <div class="race-mission boost">
+        <span class="race-mission-check">🔗</span>
+        <span class="race-mission-label">Invite builders — you earn <b>${P.l1Rate * 100}%</b> of their points, and <b>${P.l2Rate * 100}%</b> from who <i>they</i> invite</span>
+        <span class="race-mission-pts">∞</span>
+      </div>
+    </div>
+  </div>`;
+  $('#race-copy').addEventListener('click', async () => {
+    const ok = await copyText(link);
+    toast(ok ? 'Link copied — go invite the room ✦' : 'Copy failed — long-press the link to copy it');
+    if (ok) {
+      $('#race-copy').textContent = 'Copied ✓';
+      setTimeout(() => { const btn = $('#race-copy'); if (btn) btn.textContent = 'Copy 🔗'; }, 1800);
+    }
+  });
+  runCountUps(el);
+}
+
+function racePersonBits(id) {
+  const p = state.people.find((x) => x.id === id);
+  return { name: p ? p.name : '?', html: p ? avatarHtml(p, 'avatar race-avatar') : '' };
+}
+
+function renderRacePodium(board) {
+  const el = $('#race-podium');
+  const top = board.rows.slice(0, 3).filter((r) => r.total > 0);
+  if (!top.length) {
+    el.innerHTML = '<p class="count-line">The podium is empty — be the first to score ✦</p>';
+    return;
+  }
+  // visual order: silver, gold, bronze
+  const order = [top[1], top[0], top[2]].filter(Boolean);
+  el.innerHTML = order.map((r) => {
+    const place = board.rows.indexOf(r) + 1;
+    const p = state.people.find((x) => x.id === r.id);
+    const medal = ['🥇', '🥈', '🥉'][place - 1];
+    return `<div class="podium-col podium-${place}">
+      ${place === 1 ? '<div class="podium-crown">👑</div>' : ''}
+      <div class="podium-avatar">${p ? avatarHtml(p, 'avatar podium-face') : ''}</div>
+      <div class="podium-name">${esc(p ? p.name : '?')}</div>
+      <div class="podium-invites">${r.referrals.length} invite${r.referrals.length === 1 ? '' : 's'}</div>
+      <div class="podium-block">
+        <div class="podium-medal">${medal}</div>
+        <div class="podium-points"><b data-count="${r.total}">0</b> pts</div>
+      </div>
+    </div>`;
+  }).join('');
+  runCountUps(el);
+}
+
+function renderRaceList(board) {
+  const el = $('#race-list');
+  const rows = board.rows.filter((r) => r.total > 0);
+  const rest = rows.slice(3);
+  if (!rest.length) { el.innerHTML = ''; return; }
+  const max = rows[0] ? rows[0].total : 1;
+  el.innerHTML = rest.map((r, i) => {
+    const rank = i + 4;
+    const p = state.people.find((x) => x.id === r.id);
+    const inPrize = rank <= 10;
+    const divider = rank === 11
+      ? '<div class="race-prize-line"><span>🥑 DeFindex prize line — top 10 above ☝</span></div>' : '';
+    const invitees = r.referrals.map((ref) => {
+      const bits = racePersonBits(ref.id);
+      return `<span class="race-invitee">${bits.html}${esc(bits.name)} <b>+${ref.earned}</b></span>`;
+    }).join('');
+    return `${divider}<details class="race-row ${inPrize ? 'in-prize' : ''}">
+      <summary>
+        <span class="race-rank">${rank}</span>
+        ${p ? avatarHtml(p, 'avatar race-avatar') : ''}
+        <span class="race-row-name">${esc(p ? p.name : '?')}</span>
+        <span class="race-row-chips">
+          <span class="race-chip" title="own profile points">👤 ${r.base.total}</span>
+          ${r.referrals.length ? `<span class="race-chip" title="from direct invites">🔗 ${r.referrals.length} · +${r.l1Points}</span>` : ''}
+          ${r.l2Count ? `<span class="race-chip" title="from your invitees' invites">🌐 ${r.l2Count} · +${r.l2Points}</span>` : ''}
+        </span>
+        <span class="race-bar"><span class="race-bar-fill" style="width:${Math.max(3, (r.total / max) * 100).toFixed(1)}%"></span></span>
+        <span class="race-row-points">${r.total}</span>
+      </summary>
+      <div class="race-row-detail">
+        ${r.referrals.length
+          ? `<p class="race-detail-label">invited by them:</p><div class="race-invitees">${invitees}</div>`
+          : '<p class="race-detail-label">no invites yet — their whole score is profile points</p>'}
+        ${r.l2Count ? `<p class="race-detail-label">+ ${r.l2Count} builder${r.l2Count === 1 ? '' : 's'} at level 2 → +${r.l2Points} pts</p>` : ''}
+      </div>
+    </details>`;
+  }).join('');
+}
+
 /* ---------- export ---------- */
 
 async function download(path, filename) {
@@ -1447,7 +1658,7 @@ $('#export-csv').addEventListener('click', () =>
 
 /* ---------- boot ---------- */
 
-const initialView = ['builders', 'projects', 'constellation', 'ai', 'map', 'join', 'metrics'].includes(location.hash.slice(1))
+const initialView = ['builders', 'projects', 'constellation', 'planet', 'race', 'ai', 'map', 'join', 'metrics'].includes(location.hash.slice(1))
   ? location.hash.slice(1) : 'builders';
 async function boot() {
   try {
@@ -1462,10 +1673,23 @@ async function boot() {
   prefillMyProfile();
   if (typeof bindBuilderDetailModal === 'function') bindBuilderDetailModal();
   show(initialView);
+  // arrived through a referral link and no profile yet → tell them who invited them
+  if (!(state.me && state.me.id)) {
+    const inviter = state.people.find((p) => p.id === localStorage.getItem('ssc-ref'));
+    if (inviter) toast(`🎁 ${inviter.name} invited you — join to put them on the board ✦`);
+  }
 }
 boot();
+
+$('#cv-invite').addEventListener('click', async () => {
+  if (!requireProfile()) return;
+  const ok = await copyText(refLink(state.me.id));
+  toast(ok ? 'Referral link copied — share it, climb the Race 🏆' : 'Copy failed — grab your link in the Race tab');
+});
+
 setInterval(() => {
   const active = document.querySelector('.tab.active')?.dataset.view;
   if (active === 'builders' || active === 'projects') loadData().catch(() => {});
   if (active === 'metrics') loadMetrics().catch(() => {});
+  if (active === 'race') loadRace().catch(() => {});
 }, 20000); // live-ish refresh while projected on a screen; a failed tick retries next tick
