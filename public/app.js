@@ -65,7 +65,12 @@ function show(view) {
   if (view === 'metrics') loadMetrics().catch(() => toast('Connection hiccup — retrying ✦'));
   if (view === 'map') loadData().then(renderMap).catch(() => {});
   if (view === 'constellation') loadData().then(renderConstellation).catch(() => {});
-  if (view === 'planet') loadData().then(renderPlanet).catch(() => {});
+  if (view === 'builders') {
+    renderCards();
+    if (buildersMode === 'world' && typeof ensureSphereLoop === 'function') ensureSphereLoop();
+    if (buildersMode === 'scroll' && typeof ensureGalleryLoop === 'function') ensureGalleryLoop();
+  }
+  document.body.classList.toggle('gallery-scroll-lock', view === 'builders' && buildersMode === 'scroll');
 }
 
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => show(t.dataset.view)));
@@ -415,21 +420,75 @@ function matchesFilters(p) {
   return true;
 }
 
+const BUILDERS_MODE_KEY = 'ssc-builders-mode';
+const BUILDERS_MODES = ['cards', 'scroll', 'world'];
+let buildersMode = BUILDERS_MODES.includes(localStorage.getItem(BUILDERS_MODE_KEY))
+  ? localStorage.getItem(BUILDERS_MODE_KEY) : 'cards';
+
+function syncBuildersModeUi() {
+  document.querySelectorAll('[data-builders-mode]').forEach((btn) => {
+    const on = btn.dataset.buildersMode === buildersMode;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+function setBuildersMode(mode) {
+  if (!BUILDERS_MODES.includes(mode) || mode === buildersMode) {
+    syncBuildersModeUi();
+    return;
+  }
+  buildersMode = mode;
+  localStorage.setItem(BUILDERS_MODE_KEY, mode);
+  syncBuildersModeUi();
+  document.body.classList.toggle('gallery-scroll-lock', mode === 'scroll');
+  if (typeof stopGallery === 'function' && mode !== 'scroll') stopGallery();
+  if (typeof stopFlicker === 'function' && mode === 'cards') stopFlicker();
+  renderCards();
+  if (mode === 'world' && typeof ensureSphereLoop === 'function') ensureSphereLoop();
+  if (mode === 'scroll' && typeof ensureGalleryLoop === 'function') ensureGalleryLoop();
+}
+
+document.querySelectorAll('[data-builders-mode]').forEach((btn) =>
+  btn.addEventListener('click', () => setBuildersMode(btn.dataset.buildersMode)));
+
 function renderCards() {
   const visible = state.people.filter(matchesFilters);
   $('#builders-count').textContent =
     `${visible.length} builder${visible.length === 1 ? '' : 's'}` +
     (visible.length !== state.people.length ? ` (of ${state.people.length})` : '');
-  $('#empty-state').classList.toggle('hidden', state.people.length > 0);
-  $('#cards').innerHTML = visible.map(personCardHtml).join('');
-  bindCardActions('#cards');
-}
-
-function renderPlanet() {
   const empty = state.people.length === 0;
-  $('#planet-empty').classList.toggle('hidden', !empty);
-  $('#builders-sphere-wrap').classList.toggle('hidden', empty);
-  if (!empty) renderBuildersSphere(state.people);
+  $('#empty-state').classList.toggle('hidden', !empty);
+
+  const cards = $('#cards');
+  const gallery = $('#builders-gallery-wrap');
+  const sphere = $('#builders-sphere-wrap');
+  if (cards) cards.classList.toggle('hidden', empty || buildersMode !== 'cards');
+  if (gallery) gallery.classList.toggle('hidden', empty || buildersMode !== 'scroll');
+  if (sphere) sphere.classList.toggle('hidden', empty || buildersMode !== 'world');
+  syncBuildersModeUi();
+
+  if (empty) return;
+
+  if (buildersMode === 'cards') {
+    cards.innerHTML = visible.map(personCardHtml).join('');
+    bindCardActions('#cards');
+    if (typeof stopGallery === 'function') stopGallery();
+  } else if (buildersMode === 'scroll') {
+    if (typeof renderBuildersGallery === 'function') renderBuildersGallery(visible);
+  } else if (buildersMode === 'world') {
+    if (typeof renderBuildersSphere === 'function') renderBuildersSphere(visible);
+    if (typeof stopGallery === 'function') stopGallery();
+  }
+
+  // Refresh open detail card if still in the roster
+  const modal = $('#builder-detail-modal');
+  const openId = $('#builder-detail-card .card')?.dataset?.bid;
+  if (modal && !modal.classList.contains('hidden') && openId) {
+    const person = state.people.find((p) => p.id === openId);
+    if (person && typeof openBuilderDetail === 'function') openBuilderDetail(person);
+    else if (typeof closeBuilderDetail === 'function') closeBuilderDetail();
+  }
 }
 
 function personCardHtml(p) {
@@ -762,7 +821,9 @@ function openBuilderCard(personId) {
   $('#filter-type').value = '';
   $('#filter-country').value = '';
   show('builders');
-  seekCard(`#cards [data-bid="${CSS.escape(personId)}"]`);
+  const person = state.people.find((p) => p.id === personId);
+  if (buildersMode === 'cards') seekCard(`#cards [data-bid="${CSS.escape(personId)}"]`);
+  else if (person && typeof openBuilderDetail === 'function') openBuilderDetail(person);
 }
 
 function editProject(projectId) {
@@ -1447,6 +1508,13 @@ $('#export-csv').addEventListener('click', () =>
 
 /* ---------- boot ---------- */
 
+// Legacy #planet deep-link → Builders World mode
+if (location.hash.slice(1) === 'planet') {
+  buildersMode = 'world';
+  localStorage.setItem(BUILDERS_MODE_KEY, 'world');
+  history.replaceState(null, '', '#builders');
+}
+
 const initialView = ['builders', 'projects', 'constellation', 'ai', 'map', 'join', 'metrics'].includes(location.hash.slice(1))
   ? location.hash.slice(1) : 'builders';
 async function boot() {
@@ -1461,6 +1529,8 @@ async function boot() {
   await fetchMe();
   prefillMyProfile();
   if (typeof bindBuilderDetailModal === 'function') bindBuilderDetailModal();
+  syncBuildersModeUi();
+  document.body.classList.toggle('gallery-scroll-lock', buildersMode === 'scroll' && initialView === 'builders');
   show(initialView);
 }
 boot();

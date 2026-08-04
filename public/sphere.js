@@ -1,6 +1,5 @@
-/* Planet — builders 3D sphere, Fibonacci-distributed PFPs with drag/momentum.
-   Same interaction model as the SphereImageGrid React component, ported
-   to vanilla DOM so it fits this zero-dep app. Lives in the Planet tab. */
+/* Builders World — 3D sphere of PFPs with drag/momentum.
+   Fibonacci distribution, vanilla DOM (no WebGL). Mode + filters live in app.js. */
 
 const SPHERE = {
   wrap: null,
@@ -169,11 +168,17 @@ function paintSphereNodes() {
   });
 }
 
+function sphereIsActive() {
+  const view = document.getElementById('view-builders');
+  const wrap = document.getElementById('builders-sphere-wrap');
+  return !!(view && !view.classList.contains('hidden')
+    && wrap && !wrap.classList.contains('hidden'));
+}
+
 function tickSphere() {
-  const view = document.getElementById('view-planet');
-  const active = view && !view.classList.contains('hidden');
-  if (!active) {
+  if (!sphereIsActive()) {
     SPHERE.raf = null;
+    if (typeof stopFlicker === 'function') stopFlicker();
     return;
   }
 
@@ -263,7 +268,7 @@ function bindSphereEvents() {
   });
 
   window.addEventListener('resize', () => {
-    if (document.getElementById('view-planet')?.classList.contains('hidden')) return;
+    if (!sphereIsActive()) return;
     const next = sphereContainerSize();
     if (next !== SPHERE.size) renderBuildersSphere(SPHERE.people);
   });
@@ -292,6 +297,7 @@ function renderBuildersSphere(people) {
   bindSphereEvents();
   paintSphereNodes();
   ensureSphereLoop();
+  if (typeof initStellarFlicker === 'function') initStellarFlicker('world');
 }
 
 function openBuilderDetail(person) {
