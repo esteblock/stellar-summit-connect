@@ -26,7 +26,6 @@
     <button class="tab active" data-view="builders" data-icon="👥">Builders</button>
     <button class="tab" data-view="projects" data-icon="🃏">Projects</button>
     <button class="tab" data-view="constellation" data-icon="✦">Constellation ✦</button>
-    <button class="tab" data-view="planet" data-icon="🪐">Planet</button>
     <button class="tab" data-view="race" data-icon="🏆">Race</button>
     <button class="tab" data-view="ai" data-icon="✨">AI Match</button>
     <button class="tab" data-view="map" data-icon="🗺️">Map</button>
@@ -50,21 +49,26 @@
       </select>
       <select id="filter-country"><option value="">All countries</option></select>
     </div>
-    <p id="builders-count" class="count-line"></p>
+    <div class="builders-toolbar">
+      <p id="builders-count" class="count-line"></p>
+      <div class="builders-modes" role="tablist" aria-label="Builders view mode">
+        <button type="button" class="builders-mode" data-builders-mode="cards" aria-pressed="true">Cards</button>
+        <button type="button" class="builders-mode" data-builders-mode="scroll" aria-pressed="false">Scroll</button>
+        <button type="button" class="builders-mode" data-builders-mode="world" aria-pressed="false">World</button>
+      </div>
+    </div>
     <div id="cards" class="cards"></div>
+    <div id="builders-gallery-wrap" class="hidden">
+      <canvas id="gallery-stellar-mark" class="gallery-stellar-mark" width="280" height="280" aria-hidden="true"></canvas>
+      <div id="builders-gallery" class="builders-gallery" aria-label="3D scroll gallery — wheel or drag to fly through builders"></div>
+      <p class="sphere-hint">scroll / drag to fly · hover the star · tap a face for their card</p>
+    </div>
+    <div id="builders-sphere-wrap" class="hidden">
+      <canvas id="sphere-stellar-mark" class="sphere-stellar-mark" width="200" height="200" aria-hidden="true"></canvas>
+      <div id="builders-sphere" class="builders-sphere" aria-label="3D builders world — drag to rotate, tap a face for details"></div>
+      <p class="sphere-hint">drag to spin · hover the star · tap a face for their card</p>
+    </div>
     <div id="empty-state" class="empty hidden">
-      <p>Nobody here yet — be the first! ✦</p>
-      <button class="btn primary" data-goto="join">Add yourself</button>
-    </div>
-  </section>
-
-  <!-- ============ PLANET ============ -->
-  <section id="view-planet" class="view hidden">
-    <div id="builders-sphere-wrap">
-      <div id="builders-sphere" class="builders-sphere" aria-label="3D builders sphere — drag to rotate, tap a face for details"></div>
-      <p class="sphere-hint">drag to spin · tap a face for their card</p>
-    </div>
-    <div id="planet-empty" class="empty hidden">
       <p>Nobody here yet — be the first! ✦</p>
       <button class="btn primary" data-goto="join">Add yourself</button>
     </div>
@@ -368,5 +372,7 @@
 <script src="app.js"></script>
 <script src="constellation.js"></script>
 <script src="sphere.js"></script>
+<script src="gallery.js"></script>
+<script src="stellar-flicker.js"></script>
 </body>
 </html>
