@@ -1,6 +1,6 @@
-/* Builders 3D sphere — Fibonacci-distributed PFPs with drag/momentum.
+/* Planet — builders 3D sphere, Fibonacci-distributed PFPs with drag/momentum.
    Same interaction model as the SphereImageGrid React component, ported
-   to vanilla DOM so it fits this zero-dep app. Filters live in app.js. */
+   to vanilla DOM so it fits this zero-dep app. Lives in the Planet tab. */
 
 const SPHERE = {
   wrap: null,
@@ -170,7 +170,7 @@ function paintSphereNodes() {
 }
 
 function tickSphere() {
-  const view = document.getElementById('view-builders');
+  const view = document.getElementById('view-planet');
   const active = view && !view.classList.contains('hidden');
   if (!active) {
     SPHERE.raf = null;
@@ -263,7 +263,7 @@ function bindSphereEvents() {
   });
 
   window.addEventListener('resize', () => {
-    if (document.getElementById('view-builders')?.classList.contains('hidden')) return;
+    if (document.getElementById('view-planet')?.classList.contains('hidden')) return;
     const next = sphereContainerSize();
     if (next !== SPHERE.size) renderBuildersSphere(SPHERE.people);
   });

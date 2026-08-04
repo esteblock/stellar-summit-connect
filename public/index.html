@@ -26,6 +26,7 @@
     <button class="tab active" data-view="builders" data-icon="👥">Builders</button>
     <button class="tab" data-view="projects" data-icon="🃏">Projects</button>
     <button class="tab" data-view="constellation" data-icon="✦">Constellation ✦</button>
+    <button class="tab" data-view="planet" data-icon="🪐">Planet</button>
     <button class="tab" data-view="ai" data-icon="✨">AI Match</button>
     <button class="tab" data-view="map" data-icon="🗺️">Map</button>
     <button class="tab" data-view="join" data-icon="➕">Join</button>
@@ -49,11 +50,20 @@
       <select id="filter-country"><option value="">All countries</option></select>
     </div>
     <p id="builders-count" class="count-line"></p>
+    <div id="cards" class="cards"></div>
+    <div id="empty-state" class="empty hidden">
+      <p>Nobody here yet — be the first! ✦</p>
+      <button class="btn primary" data-goto="join">Add yourself</button>
+    </div>
+  </section>
+
+  <!-- ============ PLANET ============ -->
+  <section id="view-planet" class="view hidden">
     <div id="builders-sphere-wrap">
       <div id="builders-sphere" class="builders-sphere" aria-label="3D builders sphere — drag to rotate, tap a face for details"></div>
       <p class="sphere-hint">drag to spin · tap a face for their card</p>
     </div>
-    <div id="empty-state" class="empty hidden">
+    <div id="planet-empty" class="empty hidden">
       <p>Nobody here yet — be the first! ✦</p>
       <button class="btn primary" data-goto="join">Add yourself</button>
     </div>
