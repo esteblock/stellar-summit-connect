@@ -65,6 +65,10 @@ function show(view) {
   if (view === 'metrics') loadMetrics().catch(() => toast('Connection hiccup — retrying ✦'));
   if (view === 'map') loadData().then(renderMap).catch(() => {});
   if (view === 'constellation') loadData().then(renderConstellation).catch(() => {});
+  if (view === 'builders') {
+    renderCards();
+    if (typeof ensureSphereLoop === 'function') ensureSphereLoop();
+  }
 }
 
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => show(t.dataset.view)));
@@ -415,9 +419,18 @@ function renderCards() {
   $('#builders-count').textContent =
     `${visible.length} builder${visible.length === 1 ? '' : 's'}` +
     (visible.length !== state.people.length ? ` (of ${state.people.length})` : '');
-  $('#empty-state').classList.toggle('hidden', state.people.length > 0);
-  $('#cards').innerHTML = visible.map(personCardHtml).join('');
-  bindCardActions('#cards');
+  const empty = state.people.length === 0;
+  $('#empty-state').classList.toggle('hidden', !empty);
+  $('#builders-sphere-wrap')?.classList.toggle('hidden', empty);
+  if (!empty) renderBuildersSphere(visible);
+  // If a detail modal is open for someone still visible, refresh their card
+  const modal = $('#builder-detail-modal');
+  const openId = $('#builder-detail-card .card')?.dataset?.bid;
+  if (modal && !modal.classList.contains('hidden') && openId) {
+    const person = state.people.find((p) => p.id === openId);
+    if (person) openBuilderDetail(person);
+    else closeBuilderDetail();
+  }
 }
 
 function personCardHtml(p) {
@@ -750,7 +763,8 @@ function openBuilderCard(personId) {
   $('#filter-type').value = '';
   $('#filter-country').value = '';
   show('builders');
-  seekCard(`#cards [data-bid="${CSS.escape(personId)}"]`);
+  const person = state.people.find((p) => p.id === personId);
+  if (person) openBuilderDetail(person);
 }
 
 function editProject(projectId) {
@@ -1448,6 +1462,7 @@ async function boot() {
   }
   await fetchMe();
   prefillMyProfile();
+  if (typeof bindBuilderDetailModal === 'function') bindBuilderDetailModal();
   show(initialView);
 }
 boot();

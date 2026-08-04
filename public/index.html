@@ -49,12 +49,26 @@
       <select id="filter-country"><option value="">All countries</option></select>
     </div>
     <p id="builders-count" class="count-line"></p>
-    <div id="cards" class="cards"></div>
+    <div id="builders-sphere-wrap">
+      <div id="builders-sphere" class="builders-sphere" aria-label="3D builders sphere — drag to rotate, tap a face for details"></div>
+      <p class="sphere-hint">drag to spin · tap a face for their card</p>
+    </div>
     <div id="empty-state" class="empty hidden">
       <p>Nobody here yet — be the first! ✦</p>
       <button class="btn primary" data-goto="join">Add yourself</button>
     </div>
   </section>
+
+  <!-- Builder card detail (opened from sphere PFP) -->
+  <div id="builder-detail-modal" class="builder-detail-modal hidden" role="dialog" aria-modal="true" aria-label="Builder details">
+    <div class="builder-detail-backdrop" data-close-builder-detail></div>
+    <div class="builder-detail-panel">
+      <button type="button" class="builder-detail-close" data-close-builder-detail aria-label="Close">×</button>
+      <div id="builder-detail-scroll">
+        <div id="builder-detail-card"></div>
+      </div>
+    </div>
+  </div>
 
   <!-- ============ PROJECTS ============ -->
   <section id="view-projects" class="view hidden">
@@ -327,5 +341,6 @@
 <script src="countries.js"></script>
 <script src="app.js"></script>
 <script src="constellation.js"></script>
+<script src="sphere.js"></script>
 </body>
 </html>
