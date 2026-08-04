@@ -70,6 +70,12 @@ function show(view) {
 
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => show(t.dataset.view)));
 
+// Any [data-goto] button navigates, including ones in static empty states
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-goto]');
+  if (btn) show(btn.dataset.goto);
+});
+
 /* ---------- helpers ---------- */
 
 function toast(msg) {
@@ -335,8 +341,6 @@ function bindCardActions(rootSel) {
     btn.addEventListener('click', () => joinProject(btn.dataset.joinproj)));
   document.querySelectorAll(`${rootSel} [data-editproj]`).forEach((btn) =>
     btn.addEventListener('click', () => editProject(btn.dataset.editproj)));
-  document.querySelectorAll(`${rootSel} [data-goto]`).forEach((btn) =>
-    btn.addEventListener('click', () => show(btn.dataset.goto)));
   document.querySelectorAll(`${rootSel} [data-qask]`).forEach((btn) =>
     btn.addEventListener('click', () => askQuestion(...btn.dataset.qask.split(':'))));
   document.querySelectorAll(`${rootSel} [data-qanswer]`).forEach((btn) =>
