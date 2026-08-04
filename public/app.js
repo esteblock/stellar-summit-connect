@@ -49,13 +49,19 @@ const state = {
   mapMarkers: null,
 };
 
-// referral capture: /?ref=<personId> — remembered until this visitor saves a profile
+// referral + access capture: /?ref=<personId>&key=<event password> — links can
+// carry the gate password so invitees land straight on the board, and the
+// referral is remembered until this visitor saves a profile
 {
-  const refParam = new URLSearchParams(location.search).get('ref');
-  if (refParam) {
-    localStorage.setItem('ssc-ref', refParam);
-    history.replaceState(null, '', location.pathname + location.hash);
+  const params = new URLSearchParams(location.search);
+  const refParam = params.get('ref');
+  const keyParam = params.get('key');
+  if (refParam) localStorage.setItem('ssc-ref', refParam);
+  if (keyParam) {
+    localStorage.setItem('ssc-key', keyParam);
+    state.key = keyParam;
   }
+  if (refParam || keyParam) history.replaceState(null, '', location.pathname + location.hash);
 }
 
 const $ = (sel) => document.querySelector(sel);
@@ -1442,7 +1448,9 @@ $('#chat-form').addEventListener('submit', async (e) => {
 
 /* ---------- referral race ---------- */
 
-const refLink = (id) => `${location.origin}/?ref=${encodeURIComponent(id)}`;
+// referral links carry the event key too — invitees skip the password gate
+const refLink = (id) =>
+  `${location.origin}/?ref=${encodeURIComponent(id)}${state.key ? `&key=${encodeURIComponent(state.key)}` : ''}`;
 
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; }
